@@ -1,0 +1,42 @@
+name: Daily Hosts Update
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+      timezone: 'Asia/Shanghai'
+  workflow_dispatch:
+
+jobs:
+  update-hosts:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Git config
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Download and process hosts
+        run: |
+          # 下载原始文件
+          curl -s -L -o temp_hosts https://github.com/Goooler/1024_hosts/raw/master/hosts
+          # 修改内容并保存为hosts.txt
+          sed 's/^127\.0\.0\.1/0.0.0.0/g' temp_hosts > hosts.txt
+          # 清理临时文件
+          rm -f temp_hosts
+
+      - name: Commit if changed
+        run: |
+          git add hosts.txt
+          # 检查是否有变化
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-update: $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
