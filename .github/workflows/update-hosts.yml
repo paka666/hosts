@@ -21,16 +21,19 @@ jobs:
 
       - name: Download and process hosts
         run: |
+          # 创建hosts目录（如果不存在的话）
+          mkdir -p hosts
           # 下载原始文件
           curl -s -L -o temp_rules https://github.com/Goooler/1024_hosts/raw/master/hosts
-          # 修改内容并保存为hosts.txt
-          sed 's/^127\.0\.0\.1/0.0.0.0/g' temp_rules > hosts.txt
+          # 修改内容并保存到hosts文件夹下的hosts.txt
+          sed 's/^127\.0\.0\.1/0.0.0.0/g' temp_rules > hosts/hosts.txt
           # 清理临时文件
           rm -f temp_rules
 
       - name: Commit if changed
         run: |
-          git add hosts.txt
+          # 添加hosts目录下hosts.txt文件
+          git add hosts/hosts.txt
           # 检查是否有变化
           if ! git diff --staged --quiet; then
             git commit -m "Auto-update: $(date +'%Y-%m-%d %H:%M:%S')"
