@@ -22,11 +22,11 @@ jobs:
       - name: Download and process hosts
         run: |
           # 下载原始文件
-          curl -s -L -o temp_hosts https://github.com/Goooler/1024_hosts/raw/master/hosts
+          curl -s -L -o temp_rules https://github.com/Goooler/1024_hosts/raw/master/hosts
           # 修改内容并保存为hosts.txt
-          sed 's/^127\.0\.0\.1/0.0.0.0/g' temp_hosts > hosts.txt
+          sed 's/^127\.0\.0\.1/0.0.0.0/g' temp_rules > hosts.txt
           # 清理临时文件
-          rm -f temp_hosts
+          rm -f temp_rules
 
       - name: Commit if changed
         run: |
