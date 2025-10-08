@@ -1,0 +1,77 @@
+name: Daily Geo Files Update
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+      timezone: 'Asia/Shanghai'
+  workflow_dispatch:
+
+jobs:
+  update-geo-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Git config
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create geo directory
+        run: mkdir -p geo
+
+      - name: Download and process geo files
+        run: |
+          # 下载并重命名文件
+          # geoip 文件
+          curl -s -L -o geo/geoip.dat "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          
+          # geosite 文件
+          curl -s -L -o geo/geosite.dat "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          
+          # gfwlist 文件（多个来源，需要重命名）
+          curl -s -L -o geo/gfwlist_loyalsoldier.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt"
+          curl -s -L -o geo/gfwlist_anonymous.txt "https://fastly.jsdelivr.net/gh/YW5vbnltb3Vz/domain-list-community@release/gfwlist.txt"
+          curl -s -L -o geo/gfwlist_loukky.txt "https://fastly.jsdelivr.net/gh/Loukky/gfwlist-by-loukky/gfwlist.txt"
+          curl -s -L -o geo/gfwlist_original.txt "https://fastly.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt"
+          
+          # chnroute 文件（IPv4）
+          curl -s -L -o geo/chnroute_clang.txt "https://ispip.clang.cn/all_cn.txt"
+          curl -s -L -o geo/chnroute_gaoyifan.txt "https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt"
+          curl -s -L -o geo/chnroute_clang_cidr.txt "https://ispip.clang.cn/all_cn_cidr.txt"
+          curl -s -L -o geo/chnroute_soffchen.txt "https://fastly.jsdelivr.net/gh/soffchen/GeoIP2-CN@release/CN-ip-cidr.txt"
+          curl -s -L -o geo/chnroute_hackl0us.txt "https://fastly.jsdelivr.net/gh/Hackl0us/GeoIP2-CN@release/CN-ip-cidr.txt"
+          curl -s -L -o geo/chnroute_blackmatrix7.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_IP_No_IPv6.txt"
+          
+          # chnroute6 文件（IPv6）
+          curl -s -L -o geo/chnroute6_clang_ipv6.txt "https://ispip.clang.cn/all_cn_ipv6.txt"
+          curl -s -L -o geo/chnroute6_gaoyifan.txt "https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china6.txt"
+          curl -s -L -o geo/chnroute6_blackmatrix7.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_IP.txt"
+          
+          # chnlist 文件
+          curl -s -L -o geo/chnlist_accelerated_domains.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/accelerated-domains.china.conf"
+          curl -s -L -o geo/chnlist_apple_china.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/apple.china.conf"
+          curl -s -L -o geo/chnlist_google_china.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/google.china.conf"
+          curl -s -L -o geo/chnlist_loyalsoldier_china.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/china-list.txt"
+          curl -s -L -o geo/chnlist_loyalsoldier_apple.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/apple-cn.txt"
+          curl -s -L -o geo/chnlist_loyalsoldier_google.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/google-cn.txt"
+          curl -s -L -o geo/chnlist_blackmatrix7_domain.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_Domain.txt"
+
+          # 显示下载结果
+          echo "下载完成，文件列表："
+          ls -la geo/
+
+      - name: Commit if changed
+        run: |
+          git add geo/
+          # 检查是否有变化
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-update geo files: $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
