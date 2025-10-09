@@ -43,7 +43,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run comprehensive rule processor
-      run: python rules/domain/process_comprehensive_rules.py
+      run: python domain/process_comprehensive_rules.py
       
     - name: Commit and push if changed
       uses: stefanzweifel/git-auto-commit-action@v5
