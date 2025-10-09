@@ -66,13 +66,25 @@ def parse_ip_line(line):
     """解析单行中的IP/CIDR"""
     line = line.strip()
     
-    # 移除注释（#和;开头的内容）
+    # 跳过以注释字符开头的行
+    if re.match(r'^[#!;]', line):
+        return None
+    
+    # 跳过只包含空白或奇怪字符的行
+    if re.match(r'^[\s|\-*]+$', line):
+        return None
+    
+    # 移除行内的注释（#和;开头的内容）
     line = re.split(r'[#;]', line)[0].strip()
     if not line:
         return None
     
     # 移除行首的奇怪字符和空白
     line = re.sub(r'^[|\-*\s]+', '', line)
+    
+    # 跳过空行
+    if not line:
+        return None
     
     # 尝试直接解析为IP网络
     try:
@@ -131,6 +143,15 @@ def process_single_file(file_path):
             
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line_num, line in enumerate(f, 1):
+                # 跳过空行和明显无效的行
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # 跳过以注释字符开头的行
+                if re.match(r'^[#!;]', line):
+                    continue
+                    
                 network_str = parse_ip_line(line)
                 if network_str:
                     ips.add(network_str)
@@ -245,7 +266,6 @@ def update_readme(ipv4_count, ipv6_count, total_count):
     
     readme_content = f"""# IP Blocklists for AdGuardHome
 
-readme_content = f"""# IP Blocklists for AdGuardHome
 自动生成的IP黑名单，适用于AdGuardHome。
 
 ## 统计信息
@@ -281,8 +301,11 @@ readme_content = f"""# IP Blocklists for AdGuardHome
 在AdGuardHome的DNS黑名单中添加URL
 
 ## 更新频率
+
 每天自动更新。
+
 ---
+
 *最后更新: {current_time}*
 """
     
