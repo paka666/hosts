@@ -85,8 +85,8 @@ def extract_ips_from_line(line):
     # 移除行内注释（#和;开头的内容）
     line = re.sub(r'[#;].*$', '', line).strip()
     
-    # 跳过空行
-    if not line:
+    # 跳过空行和空白字符行
+    if not line or line.isspace():
         return ips_found
     
     # 使用正则表达式提取所有可能的IP/CIDR
