@@ -384,7 +384,7 @@ class ComprehensiveRuleProcessor:
 ## 处理流程
 
 1. **下载**: 多线程下载所有规则源
-2. **预处理**: 移除注释行 (! # // /* 开头) 和空行 → n1
+2. **预处理**: 移除"!"开头行和空行 → n1
 3. **分类**:
    - 提取纯IP → n2
    - 提取纯域名 → n3
@@ -403,7 +403,7 @@ class ComprehensiveRuleProcessor:
 *最后更新: {current_time}*
 """
         
-        with open('README.md', 'w', encoding='utf-8') as f:
+        with open('rules/domain/README.md', 'w', encoding='utf-8') as f:
             f.write(readme_content)
         
         print("✓ 更新 README.md")
