@@ -17,6 +17,52 @@ SOURCES = [
     "https://github.com/bitwire-it/ipblocklist/raw/main/outbound.txt"
 ]
 
+# 跳过规则 - 匹配这些模式的行将被忽略
+SKIP_PATTERNS = [
+    r'^\s*#',      # 注释行
+    r'^\s*$',      # 空行
+    r'^\s*//',     # 双斜杠注释
+    r'^\s*;',      # 分号注释
+    r'^\s*!',      # 感叹号注释
+    r'^\[.*\]$',   # 方括号内容（通常是章节标题）
+    r'^\s*Remarks:', # 备注
+    r'^\s*Category:', # 分类
+    r'^\s*Update:',   # 更新信息
+    r'^\s*Version:',  # 版本信息
+    r'^\s*Title:',    # 标题
+    r'^Description:', # 描述
+    r'^\s*Homepage:', # 主页
+    r'^\s*License:',  # 许可证
+    r'^\s*Author:',   # 作者
+    r'^\s*Source:',   # 来源
+    r'^\s*Maintainer:', # 维护者
+    r'^\s*Generated:',  # 生成时间
+    r'^\s*Expires:',    # 过期时间
+    r'^#.*$',         # 任何以#开头的行
+    r'^\s*-\s*',      # 以横线开头的行
+    r'^\s*\*',        # 以星号开头的行
+    r'^\s*@',         # 以@开头的行
+    r'^\s*&',         # 以&开头的行
+    r'^\s*~',         # 以~开头的行
+    r'^\s*/',         # 以/开头的行
+]
+
+def should_skip_line(line):
+    """检查是否应该跳过该行"""
+    line = line.strip()
+    if not line:
+        return True
+    
+    for pattern in SKIP_PATTERNS:
+        if re.match(pattern, line, re.IGNORECASE):
+            return True
+    
+    # 额外的检查：如果行中包含非IP相关字符，跳过
+    if re.search(r'[a-zA-Z]', line) and not re.search(r'[0-9]', line):
+        return True
+    
+    return False
+
 def download_file(url, output_path):
     """下载文件"""
     try:
@@ -63,15 +109,11 @@ def extract_and_clean_zip(zip_path, extract_to):
         return False
 
 def parse_ip_line(line):
-    """解析单行中的IP/CIDR"""
+    """解析单行中的IP/CIDR - 严格模式"""
     line = line.strip()
     
-    # 跳过以注释字符开头的行
-    if re.match(r'^[#!;]', line):
-        return None
-    
-    # 跳过只包含空白或奇怪字符的行
-    if re.match(r'^[\s|\-*]+$', line):
+    # 应用跳过规则
+    if should_skip_line(line):
         return None
     
     # 移除行内的注释（#和;开头的内容）
@@ -102,16 +144,20 @@ def parse_ip_line(line):
     except ValueError:
         pass
     
-    # 使用正则表达式提取可能的IP/CIDR
-    ip_patterns = [
+# 严格的IP/CIDR正则表达式模式
+        IP_PATTERNS = [
         # IPv4 CIDR
-        r'(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})(?:\s|$)',
+        r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/\d{1,2}\b',
         # IPv4 地址
-        r'(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s|$)',
-        # IPv6 CIDR (简化匹配)
-        r'(?:^|\s)([0-9a-fA-F:]+/\d{1,3})(?:\s|$)',
-        # IPv6 地址
-        r'(?:^|\s)([0-9a-fA-F:]+)(?:\s|$)'
+        r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
+        # IPv6 CIDR (完整格式)
+        r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}/\d{1,3}\b',
+        # IPv6 CIDR (压缩格式)
+        r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?/\d{1,3}\b',
+        # IPv6 地址 (完整格式)
+        r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b',
+        # IPv6 地址 (压缩格式)
+        r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?\b'
     ]
     
     for pattern in ip_patterns:
@@ -143,21 +189,19 @@ def process_single_file(file_path):
             
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line_num, line in enumerate(f, 1):
-                # 跳过空行和明显无效的行
-                line = line.strip()
-                if not line:
+                if should_skip_line(line):
+                    skipped_lines += 1
                     continue
-                    
-                # 跳过以注释字符开头的行
-                if re.match(r'^[#!;]', line):
-                    continue
-                    
+
                 network_str = parse_ip_line(line)
                 if network_str:
                     ips.add(network_str)
-                    
+                    processed_lines += 1
+                else:
+                    skipped_lines += 1
+
         if ips:
-            print(f"从 {os.path.basename(file_path)} 提取了 {len(ips)} 个IP/CIDR")
+            print(f"从 {os.path.basename(file_path)} 提取了 {len(ips)} 个IP/CIDR") (跳过 {skipped_lines} 行)")
             
     except Exception as e:
         print(f"处理文件 {file_path} 时出错: {e}")
@@ -253,7 +297,6 @@ def create_format(ipv4_list, ipv6_list):
     formatted = []
     
     for network in all_networks:
-        # CIDR格式
         formatted.append(str(network))
     
     return formatted
@@ -291,25 +334,35 @@ def update_readme(ipv4_count, ipv6_count, total_count):
 1. 下载所有源数据
 2. 解压并清理ZIP文件（移除.md/.gitignore/.sh文件）
 3. 从所有.ipset/.netset/.txt文件中提取IP和CIDR
-4. 合并去重所有IP/CIDR
-5. 使用Radix树进行网络优化（去除被包含的子网）
-6. 分离IPv4和IPv6地址
-7. 排序并生成最终文件
+4. 严格过滤：跳过注释、文本描述、无效格式
+5. 合并去重所有IP/CIDR
+6. 使用Radix树进行网络优化（去除被包含的子网）
+7. 分离IPv4和IPv6地址
+8. 排序并生成最终文件
+
+## 跳过规则
+
+脚本会跳过以下内容：
+- 所有注释行 (#, //, ;, ! 开头)
+- 空行和空白行
+- 章节标题 [section]
+- 元信息 (Remarks, Category, Update, Version等)
+- 其他无效格式
 
 ## 使用说明
 
-黑名单中添加URL
+适用于AD Home等需要纯IP/CIDR格式的系统，黑名单中添加URL。
 
 ## 更新频率
 
-每天自动更新
+每天自动更新。
 
 ---
 
 *最后更新: {current_time}*
 """
     
-    with open('README.md', 'w', encoding='utf-8') as f:
+    with open('rules/ip/README.md', 'w', encoding='utf-8') as f:
         f.write(readme_content)
 
 def main():
