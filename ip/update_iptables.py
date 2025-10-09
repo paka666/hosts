@@ -247,13 +247,13 @@ def separate_and_sort_ips(ip_list):
     print(f"IPv4网络: {len(ipv4_networks)}, IPv6网络: {len(ipv6_networks)}")
     return ipv4_networks, ipv6_networks
 
-def create_adguard_format(ipv4_list, ipv6_list):
-    """创建AdGuardHome兼容的格式"""
+def create_format(ipv4_list, ipv6_list):
+    """创建格式"""
     all_networks = ipv4_list + ipv6_list
     formatted = []
     
     for network in all_networks:
-        # AdGuardHome可以直接使用CIDR格式
+        # CIDR格式
         formatted.append(str(network))
     
     return formatted
@@ -264,9 +264,9 @@ def update_readme(ipv4_count, ipv6_count, total_count):
     
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    readme_content = f"""# IP Blocklists for AdGuardHome
+    readme_content = f"""# IP Blocklists
 
-自动生成的IP黑名单，适用于AdGuardHome。
+脚本自动生成的IP黑名单
 
 ## 统计信息
 
@@ -276,9 +276,9 @@ def update_readme(ipv4_count, ipv6_count, total_count):
 
 ## 文件说明
 
-- `adguard-ip-blocklist.txt` - AdGuardHome专用格式，包含所有IPv4和IPv6网络
-- `ipv4-list.txt` - 纯IPv4网络列表  
-- `ipv6-list.txt` - 纯IPv6网络列表
+- `ip-blocklist.txt` - IPv4和IPv6网络列表
+- `ipv4-list.txt` - IPv4网络列表  
+- `ipv6-list.txt` - IPv6网络列表
 
 ## 数据来源
 
@@ -298,11 +298,11 @@ def update_readme(ipv4_count, ipv6_count, total_count):
 
 ## 使用说明
 
-在AdGuardHome的DNS黑名单中添加URL
+黑名单中添加URL
 
 ## 更新频率
 
-每天自动更新。
+每天自动更新
 
 ---
 
@@ -366,42 +366,45 @@ def main():
         # 分离IPv4和IPv6
         ipv4_networks, ipv6_networks = separate_and_sort_ips(consolidated_ips)
         
-        # 生成AdGuardHome格式
-        adguard_list = create_adguard_format(ipv4_networks, ipv6_networks)
+        # 生成列表
+        all_list = create_format(ipv4_networks, ipv6_networks)
         
         # 写入输出文件
         print(f"\n生成输出文件...")
-        
-        # AdGuardHome完整列表
-        with open('adguard-ip-blocklist.txt', 'w', encoding='utf-8') as f:
-            f.write("# AdGuardHome IP Blocklist\n")
+
+        # 确保输出目录存在
+        os.makedirs('rules/ip', exist_ok=True)
+
+        # 完整列表
+        with open('rules/ip/ip-blocklist.txt', 'w', encoding='utf-8') as f:
+            f.write("# IP Blocklist\n")
             f.write("# Generated automatically - DO NOT EDIT MANUALLY\n")
-            f.write(f"# Total networks: {len(adguard_list)}\n")
+            f.write(f"# Total networks: {len(all_list)}\n")
             f.write(f"# IPv4: {len(ipv4_networks)}, IPv6: {len(ipv6_networks)}\n\n")
-            for line in adguard_list:
+            for line in all_list:
                 f.write(line + '\n')
         
         # IPv4专用列表
-        with open('ipv4-list.txt', 'w', encoding='utf-8') as f:
+        with open('rules/ip/ipv4-list.txt', 'w', encoding='utf-8') as f:
             f.write("# IPv4 Blocklist\n")
             f.write(f"# Total: {len(ipv4_networks)}\n\n")
             for network in ipv4_networks:
                 f.write(str(network) + '\n')
         
         # IPv6专用列表
-        with open('ipv6-list.txt', 'w', encoding='utf-8') as f:
+        with open('rules/ip/ipv6-list.txt', 'w', encoding='utf-8') as f:
             f.write("# IPv6 Blocklist\n")
             f.write(f"# Total: {len(ipv6_networks)}\n\n")
             for network in ipv6_networks:
                 f.write(str(network) + '\n')
         
         # 更新README
-        update_readme(len(ipv4_networks), len(ipv6_networks), len(adguard_list))
+        update_readme(len(ipv4_networks), len(ipv6_networks), len(all_list))
         
         print(f"\n{'='*50}")
         print("处理完成!")
         print(f"生成文件:")
-        print(f"  - adguard-ip-blocklist.txt ({len(adguard_list)} 个网络)")
+        print(f"  - ip-blocklist.txt ({len(all_list)} 个网络)")
         print(f"  - ipv4-list.txt ({len(ipv4_networks)} 个网络)")
         print(f"  - ipv6-list.txt ({len(ipv6_networks)} 个网络)")
         print(f"{'='*50}")
