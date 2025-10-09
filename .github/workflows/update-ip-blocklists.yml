@@ -40,7 +40,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run ip rule processor
-      run: python update_iptables.py
+      run: python rules/ip/update_iptables.py
       
     - name: Commit and push if changed
       uses: stefanzweifel/git-auto-commit-action@v5
