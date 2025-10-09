@@ -26,6 +26,7 @@ jobs:
         rm -f rules/ip/ip-blocklist.txt
         rm -f rules/ip/ipv4-list.txt
         rm -f rules/ip/ipv6-list.txt
+        rm -f rules/ip/README.md
 
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
