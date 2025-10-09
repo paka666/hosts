@@ -6,6 +6,8 @@ import tempfile
 import requests
 import ipaddress
 import radix
+import asyncio
+import aiohttp
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import shutil
