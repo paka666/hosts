@@ -23,7 +23,7 @@ jobs:
     - name: remove old files
       run: |
         mkdir -p rules/ip
-        rm -f rules/ip/adguard-ip-blocklist.txt
+        rm -f rules/ip/ip-blocklist.txt
         rm -f rules/ip/ipv4-list.txt
         rm -f rules/ip/ipv6-list.txt
 
@@ -46,4 +46,4 @@ jobs:
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "chore: Update IP blocklists"
-        file_pattern: "rules/ip/adguard-ip-blocklist.txt rules/ip/ipv4-list.txt rules/ip/ipv6-list.txt rules/ip/README.md"
+        file_pattern: "rules/ip/ip-blocklist.txt rules/ip/ipv4-list.txt rules/ip/ipv6-list.txt rules/ip/README.md"
