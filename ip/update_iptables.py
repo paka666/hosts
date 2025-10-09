@@ -108,6 +108,22 @@ def extract_and_clean_zip(zip_path, extract_to):
         print(f"解压失败 {zip_path}: {e}")
         return False
 
+# 严格的IP/CIDR正则表达式模式
+IP_PATTERNS = [
+    # IPv4 CIDR
+    r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/\d{1,2}\b',
+    # IPv4 地址
+    r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
+    # IPv6 CIDR (完整格式)
+    r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}/\d{1,3}\b',
+    # IPv6 CIDR (压缩格式)
+    r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?/\d{1,3}\b',
+    # IPv6 地址 (完整格式)
+    r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b',
+    # IPv6 地址 (压缩格式)
+    r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?\b'
+]
+
 def parse_ip_line(line):
     """解析单行中的IP/CIDR - 严格模式"""
     line = line.strip()
@@ -144,23 +160,7 @@ def parse_ip_line(line):
     except ValueError:
         pass
     
-# 严格的IP/CIDR正则表达式模式
-        IP_PATTERNS = [
-        # IPv4 CIDR
-        r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/\d{1,2}\b',
-        # IPv4 地址
-        r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
-        # IPv6 CIDR (完整格式)
-        r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}/\d{1,3}\b',
-        # IPv6 CIDR (压缩格式)
-        r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?/\d{1,3}\b',
-        # IPv6 地址 (完整格式)
-        r'\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b',
-        # IPv6 地址 (压缩格式)
-        r'\b(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4})*)?\b'
-    ]
-    
-    for pattern in ip_patterns:
+    for pattern in IP_PATTERNS:
         matches = re.findall(pattern, line)
         for match in matches:
             try:
@@ -182,6 +182,9 @@ def parse_ip_line(line):
 def process_single_file(file_path):
     """处理单个文件，提取所有有效的IP/CIDR"""
     ips = set()
+    skipped_lines = 0
+    processed_lines = 0
+    
     try:
         file_size = os.path.getsize(file_path)
         if file_size == 0:
@@ -201,7 +204,7 @@ def process_single_file(file_path):
                     skipped_lines += 1
 
         if ips:
-            print(f"从 {os.path.basename(file_path)} 提取了 {len(ips)} 个IP/CIDR") (跳过 {skipped_lines} 行)")
+            print(f"从 {os.path.basename(file_path)} 提取了 {len(ips)} 个IP/CIDR (跳过 {skipped_lines} 行)")
             
     except Exception as e:
         print(f"处理文件 {file_path} 时出错: {e}")
@@ -291,8 +294,8 @@ def separate_and_sort_ips(ip_list):
     print(f"IPv4网络: {len(ipv4_networks)}, IPv6网络: {len(ipv6_networks)}")
     return ipv4_networks, ipv6_networks
 
-def create_format(ipv4_list, ipv6_list):
-    """创建格式"""
+def create_pure_ip_list(ipv4_list, ipv6_list):
+    """创建纯IP/CIDR列表 - 每行一个，无注释"""
     all_networks = ipv4_list + ipv6_list
     formatted = []
     
@@ -343,15 +346,14 @@ def update_readme(ipv4_count, ipv6_count, total_count):
 ## 跳过规则
 
 脚本会跳过以下内容：
-- 所有注释行 (#, //, ;, ! 开头)
+- 注释行 (#, //, ;, ! 开头)
 - 空行和空白行
-- 章节标题 [section]
-- 元信息 (Remarks, Category, Update, Version等)
+- 描述行
 - 其他无效格式
 
 ## 使用说明
 
-适用于AD Home等需要纯IP/CIDR格式的系统，黑名单中添加URL。
+适用于AdGuardHome等需要纯IP/CIDR格式的系统，黑名单中添加URL。
 
 ## 更新频率
 
@@ -420,7 +422,7 @@ def main():
         ipv4_networks, ipv6_networks = separate_and_sort_ips(consolidated_ips)
         
         # 生成列表
-        all_list = create_format(ipv4_networks, ipv6_networks)
+        all_list = create_pure_ip_list(ipv4_networks, ipv6_networks)
         
         # 写入输出文件
         print(f"\n生成输出文件...")
@@ -428,26 +430,18 @@ def main():
         # 确保输出目录存在
         os.makedirs('rules/ip', exist_ok=True)
 
-        # 完整列表
+        # 完整列表 - 纯IP/CIDR格式
         with open('rules/ip/ip-blocklist.txt', 'w', encoding='utf-8') as f:
-            f.write("# IP Blocklist\n")
-            f.write("# Generated automatically - DO NOT EDIT MANUALLY\n")
-            f.write(f"# Total networks: {len(all_list)}\n")
-            f.write(f"# IPv4: {len(ipv4_networks)}, IPv6: {len(ipv6_networks)}\n\n")
             for line in all_list:
                 f.write(line + '\n')
         
-        # IPv4专用列表
+        # IPv4专用列表 - 纯IP/CIDR格式
         with open('rules/ip/ipv4-list.txt', 'w', encoding='utf-8') as f:
-            f.write("# IPv4 Blocklist\n")
-            f.write(f"# Total: {len(ipv4_networks)}\n\n")
             for network in ipv4_networks:
                 f.write(str(network) + '\n')
         
-        # IPv6专用列表
+        # IPv6专用列表 - 纯IP/CIDR格式
         with open('rules/ip/ipv6-list.txt', 'w', encoding='utf-8') as f:
-            f.write("# IPv6 Blocklist\n")
-            f.write(f"# Total: {len(ipv6_networks)}\n\n")
             for network in ipv6_networks:
                 f.write(str(network) + '\n')
         
