@@ -1,4 +1,4 @@
-name: Daily 1024Hosts Update
+name: Update 1024Hosts
 
 on:
   pull_request:
@@ -42,7 +42,7 @@ jobs:
       - name: Commit and push if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Daily 1024Hosts Update"
+          commit_message: "chore: Update 1024Hosts"
           file_pattern: "rules/hosts/1024hosts.txt"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
