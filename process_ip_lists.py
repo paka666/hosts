@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+import os
+import re
+import zipfile
+import tempfile
+import requests
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import radix
+from pathlib import Path
+import shutil
+
+# 配置
+SOURCES = [
+    "https://codeload.github.com/firehol/blocklist-ipsets/zip/refs/heads/master",
+    "https://github.com/bitwire-it/ipblocklist/raw/main/inbound.txt", 
+    "https://github.com/bitwire-it/ipblocklist/raw/main/outbound.txt"
+]
+
+def download_file(url, output_path):
+    """下载文件"""
+    try:
+        print(f"下载: {url}")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, timeout=60, stream=True, headers=headers)
+        response.raise_for_status()
+        
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        print(f"下载完成: {url} -> {output_path}")
+        return True
+    except Exception as e:
+        print(f"下载失败 {url}: {e}")
+        return False
+
+def extract_and_clean_zip(zip_path, extract_to):
+    """解压ZIP文件并清理不需要的文件"""
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)
+        print(f"解压完成: {zip_path} -> {extract_to}")
+        
+        # 递归删除不需要的文件
+        extensions_to_remove = {'.md', '.gitignore', '.sh'}
+        removed_count = 0
+        
+        for root, dirs, files in os.walk(extract_to):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if any(file.endswith(ext) for ext in extensions_to_remove):
+                    os.remove(file_path)
+                    removed_count += 1
+                    print(f"删除文件: {file_path}")
+        
+        print(f"清理完成，删除了 {removed_count} 个不需要的文件")
+        return True
+    except Exception as e:
+        print(f"解压失败 {zip_path}: {e}")
+        return False
+
+def parse_ip_line(line):
+    """解析单行中的IP/CIDR"""
+    line = line.strip()
+    
+    # 移除注释（#和;开头的内容）
+    line = re.split(r'[#;]', line)[0].strip()
+    if not line:
+        return None
+    
+    # 移除行首的奇怪字符和空白
+    line = re.sub(r'^[|\-*\s]+', '', line)
+    
+    # 尝试直接解析为IP网络
+    try:
+        # 处理单个IP（自动转换为/32或/128）
+        if '/' not in line:
+            # 尝试解析为IPv4或IPv6地址
+            ip_obj = ipaddress.ip_address(line)
+            if ip_obj.version == 4:
+                return str(ipaddress.ip_network(f"{line}/32", strict=False))
+            else:
+                return str(ipaddress.ip_network(f"{line}/128", strict=False))
+        else:
+            # 直接解析CIDR
+            return str(ipaddress.ip_network(line, strict=False))
+    except ValueError:
+        pass
+    
+    # 使用正则表达式提取可能的IP/CIDR
+    ip_patterns = [
+        # IPv4 CIDR
+        r'(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})(?:\s|$)',
+        # IPv4 地址
+        r'(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s|$)',
+        # IPv6 CIDR (简化匹配)
+        r'(?:^|\s)([0-9a-fA-F:]+/\d{1,3})(?:\s|$)',
+        # IPv6 地址
+        r'(?:^|\s)([0-9a-fA-F:]+)(?:\s|$)'
+    ]
+    
+    for pattern in ip_patterns:
+        matches = re.findall(pattern, line)
+        for match in matches:
+            try:
+                if '/' in match:
+                    network = ipaddress.ip_network(match, strict=False)
+                    return str(network)
+                else:
+                    # 单个IP地址
+                    ip_obj = ipaddress.ip_address(match)
+                    if ip_obj.version == 4:
+                        return str(ipaddress.ip_network(f"{match}/32", strict=False))
+                    else:
+                        return str(ipaddress.ip_network(f"{match}/128", strict=False))
+            except ValueError:
+                continue
+    
+    return None
+
+def process_single_file(file_path):
+    """处理单个文件，提取所有有效的IP/CIDR"""
+    ips = set()
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return ips
+            
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line_num, line in enumerate(f, 1):
+                network_str = parse_ip_line(line)
+                if network_str:
+                    ips.add(network_str)
+                    
+        if ips:
+            print(f"从 {os.path.basename(file_path)} 提取了 {len(ips)} 个IP/CIDR")
+            
+    except Exception as e:
+        print(f"处理文件 {file_path} 时出错: {e}")
+    
+    return ips
+
+def process_directory(directory):
+    """处理目录中的所有IP相关文件"""
+    all_ips = set()
+    
+    # 处理的文件扩展名
+    ip_extensions = {'.ipset', '.netset', '.txt'}
+    processed_files = 0
+    
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if any(file.endswith(ext) for ext in ip_extensions):
+                ips = process_single_file(file_path)
+                all_ips.update(ips)
+                processed_files += 1
+    
+    print(f"处理了 {processed_files} 个文件，总共提取 {len(all_ips)} 个唯一IP/CIDR")
+    return all_ips
+
+def consolidate_networks_with_radix(ip_set):
+    """使用Radix树优化合并网络（去除被包含的子网）"""
+    if not ip_set:
+        return []
+    
+    print(f"开始网络合并优化，原始数量: {len(ip_set)}")
+    rtree = radix.Radix()
+    invalid_count = 0
+    
+    # 第一步：将所有有效的网络添加到Radix树
+    for ip_str in ip_set:
+        try:
+            rtree.add(ip_str)
+        except Exception as e:
+            invalid_count += 1
+    
+    if invalid_count > 0:
+        print(f"跳过 {invalid_count} 个无效的网络格式")
+    
+    # 获取所有前缀
+    all_prefixes = rtree.prefixes()
+    if not all_prefixes:
+        return []
+    
+    # 第二步：识别并标记需要移除的子网
+    prefixes_to_remove = set()
+    
+    for prefix_str in all_prefixes:
+        # 查找被当前前缀覆盖的所有更具体的前缀
+        covered_nodes = rtree.search_covered(prefix_str)
+        if len(covered_nodes) > 1:
+            for node in covered_nodes:
+                if node.prefix != prefix_str:  # 不移除父前缀本身
+                    prefixes_to_remove.add(node.prefix)
+    
+    # 第三步：构建最终列表（移除所有被包含的子网）
+    consolidated = [p for p in all_prefixes if p not in prefixes_to_remove]
+    
+    print(f"合并完成: {len(ip_set)} -> {len(consolidated)}")
+    return consolidated
+
+def separate_and_sort_ips(ip_list):
+    """分离IPv4和IPv6并分别排序"""
+    ipv4_networks = []
+    ipv6_networks = []
+    
+    for ip_str in ip_list:
+        try:
+            network = ipaddress.ip_network(ip_str, strict=False)
+            if network.version == 4:
+                ipv4_networks.append(network)
+            else:
+                ipv6_networks.append(network)
+        except ValueError as e:
+            print(f"无效的网络格式 {ip_str}: {e}")
+            continue
+    
+    # 排序
+    ipv4_networks.sort()
+    ipv6_networks.sort()
+    
+    print(f"IPv4网络: {len(ipv4_networks)}, IPv6网络: {len(ipv6_networks)}")
+    return ipv4_networks, ipv6_networks
+
+def create_adguard_format(ipv4_list, ipv6_list):
+    """创建AdGuardHome兼容的格式"""
+    all_networks = ipv4_list + ipv6_list
+    formatted = []
+    
+    for network in all_networks:
+        # AdGuardHome可以直接使用CIDR格式
+        formatted.append(str(network))
+    
+    return formatted
+
+def update_readme(ipv4_count, ipv6_count, total_count):
+    """更新README文件"""
+    from datetime import datetime
+    
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    readme_content = f"""# IP Blocklists for AdGuardHome
+
+readme_content = f"""# IP Blocklists for AdGuardHome
+自动生成的IP黑名单，适用于AdGuardHome。
+
+## 统计信息
+
+- **总网络数**: {total_count}
+- **IPv4网络**: {ipv4_count}
+- **IPv6网络**: {ipv6_count}
+
+## 文件说明
+
+- `adguard-ip-blocklist.txt` - AdGuardHome专用格式，包含所有IPv4和IPv6网络
+- `ipv4-list.txt` - 纯IPv4网络列表  
+- `ipv6-list.txt` - 纯IPv6网络列表
+
+## 数据来源
+
+1. [firehol/blocklist-ipsets](https://github.com/firehol/blocklist-ipsets) - ZIP压缩包，包含多个.ipset/.netset文件
+2. [bitwire-it/ipblocklist](https://github.com/bitwire-it/ipblocklist) - inbound.txt
+3. [bitwire-it/ipblocklist](https://github.com/bitwire-it/ipblocklist) - outbound.txt
+
+## 处理流程
+
+1. 下载所有源数据
+2. 解压并清理ZIP文件（移除.md/.gitignore/.sh文件）
+3. 从所有.ipset/.netset/.txt文件中提取IP和CIDR
+4. 合并去重所有IP/CIDR
+5. 使用Radix树进行网络优化（去除被包含的子网）
+6. 分离IPv4和IPv6地址
+7. 排序并生成最终文件
+
+## 使用说明
+
+在AdGuardHome的DNS黑名单中添加以下URL：
+https://raw.githubusercontent.com/你的用户名/你的仓库名/main/adguard-ip-blocklist.txt
+
+## 更新频率
+每天自动更新。
+---
+*最后更新: {current_time}*
+"""
+    
+    with open('README.md', 'w', encoding='utf-8') as f:
+        f.write(readme_content)
+
+def main():
+    print("=" * 50)
+    print("开始处理IP黑名单")
+    print("=" * 50)
+    
+    all_ips = set()
+    
+    # 创建临时目录
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        
+        # 处理每个数据源
+        for i, url in enumerate(SOURCES):
+            print(f"\n{'='*30}")
+            print(f"处理源 {i+1}/{len(SOURCES)}: {url}")
+            print(f"{'='*30}")
+            
+            if url.endswith('.zip'):
+                # 处理ZIP文件
+                zip_path = temp_path / f"source_{i}.zip"
+                if download_file(url, zip_path):
+                    extract_dir = temp_path / f"extracted_{i}"
+                    if extract_and_clean_zip(zip_path, extract_dir):
+                        ips = process_directory(extract_dir)
+                        all_ips.update(ips)
+                        print(f"✓ 从ZIP源提取了 {len(ips)} 个IP/CIDR")
+            else:
+                # 处理单个文本文件
+                file_path = temp_path / f"source_{i}.txt"
+                if download_file(url, file_path):
+                    ips = process_single_file(file_path)
+                    all_ips.update(ips)
+                    print(f"✓ 从文本文件提取了 {len(ips)} 个IP/CIDR")
+        
+        print(f"\n{'='*50}")
+        print(f"数据收集完成")
+        print(f"{'='*50}")
+        print(f"总共收集到 {len(all_ips)} 个唯一IP/CIDR")
+        
+        if not all_ips:
+            print("错误: 没有提取到任何有效的IP/CIDR")
+            return
+        
+        # 网络合并优化
+        print(f"\n开始网络合并优化...")
+        consolidated_ips = consolidate_networks_with_radix(all_ips)
+        
+        if not consolidated_ips:
+            print("错误: 网络合并后没有剩余的有效IP")
+            return
+        
+        # 分离IPv4和IPv6
+        ipv4_networks, ipv6_networks = separate_and_sort_ips(consolidated_ips)
+        
+        # 生成AdGuardHome格式
+        adguard_list = create_adguard_format(ipv4_networks, ipv6_networks)
+        
+        # 写入输出文件
+        print(f"\n生成输出文件...")
+        
+        # AdGuardHome完整列表
+        with open('adguard-ip-blocklist.txt', 'w', encoding='utf-8') as f:
+            f.write("# AdGuardHome IP Blocklist\n")
+            f.write("# Generated automatically - DO NOT EDIT MANUALLY\n")
+            f.write(f"# Total networks: {len(adguard_list)}\n")
+            f.write(f"# IPv4: {len(ipv4_networks)}, IPv6: {len(ipv6_networks)}\n\n")
+            for line in adguard_list:
+                f.write(line + '\n')
+        
+        # IPv4专用列表
+        with open('ipv4-list.txt', 'w', encoding='utf-8') as f:
+            f.write("# IPv4 Blocklist\n")
+            f.write(f"# Total: {len(ipv4_networks)}\n\n")
+            for network in ipv4_networks:
+                f.write(str(network) + '\n')
+        
+        # IPv6专用列表
+        with open('ipv6-list.txt', 'w', encoding='utf-8') as f:
+            f.write("# IPv6 Blocklist\n")
+            f.write(f"# Total: {len(ipv6_networks)}\n\n")
+            for network in ipv6_networks:
+                f.write(str(network) + '\n')
+        
+        # 更新README
+        update_readme(len(ipv4_networks), len(ipv6_networks), len(adguard_list))
+        
+        print(f"\n{'='*50}")
+        print("处理完成!")
+        print(f"生成文件:")
+        print(f"  - adguard-ip-blocklist.txt ({len(adguard_list)} 个网络)")
+        print(f"  - ipv4-list.txt ({len(ipv4_networks)} 个网络)")
+        print(f"  - ipv6-list.txt ({len(ipv6_networks)} 个网络)")
+        print(f"{'='*50}")
+
+if __name__ == "__main__":
+    main()
