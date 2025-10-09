@@ -1,2 +1,4 @@
-requests
+aiohttp
+brotlicffi
 py-radix
+requests
