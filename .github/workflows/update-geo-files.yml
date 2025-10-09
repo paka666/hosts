@@ -2,8 +2,7 @@ name: Daily Geo Files Update
 
 on:
   schedule:
-    - cron: '0 2 * * *'
-      timezone: 'Asia/Shanghai'
+    - cron: '0 17 * * *'
   workflow_dispatch:
 
 jobs:
