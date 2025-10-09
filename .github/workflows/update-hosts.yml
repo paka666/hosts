@@ -2,8 +2,7 @@ name: Daily Hosts Update
 
 on:
   schedule:
-    - cron: '0 1 * * *'
-      timezone: 'Asia/Shanghai'
+    - cron: '0 17 * * *'
   workflow_dispatch:
 
 jobs:
