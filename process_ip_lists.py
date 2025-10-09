@@ -278,8 +278,7 @@ readme_content = f"""# IP Blocklists for AdGuardHome
 
 ## 使用说明
 
-在AdGuardHome的DNS黑名单中添加以下URL：
-https://raw.githubusercontent.com/你的用户名/你的仓库名/main/adguard-ip-blocklist.txt
+在AdGuardHome的DNS黑名单中添加URL
 
 ## 更新频率
 每天自动更新。
