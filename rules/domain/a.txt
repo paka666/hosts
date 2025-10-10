@@ -1,5 +1,5 @@
 # A Rules (Contains IP but not pure IP)
-# Total: 2897
+# Total: 2896
 
 #  0.0.0.0 as.eu.angsrvr.com #[affects videos]
 # 0.0.0.0  adm.fwmrm.net #[affects nhl.com]
@@ -187,7 +187,7 @@
 # There is a version of this file that uses 0.0.0.0 instead of 127.0.0.1
 # There is a version of this file that uses 127.0.0.1 instead of 0.0.0.0
 # This *must* be the first line: 127.0.0.1     localhost   #
-# Updated: 10/9/2025  13:51 (1:51 PM CST)
+# Updated: 10/10/2025  08:14 (8:14 AM CST)
 # [1&1 Internet][AS8560][195.20.243.0 - 195.20.255.255]
 # [1&1 Internet][AS8560][212.227.36.0 - 212.227.60.255]
 # [1&1 Internet][AS8560][217.72.192.0 - 217.72.204.255]
@@ -1231,8 +1231,8 @@
 # [nLayer][AS4436][108.161.176.0 - 108.161.191.255]
 # [nLayer][AS4436][198.232.112.0 - 198.232.127.255]
 # last updated:   2025-10-09 04:11:51 CEST
+# last updated:   Fri, 10 Oct 2025 07:30:55 GMT
 # last updated:   Sat, 10 May 2025 16:19:19 GMT
-# last updated:   Tue, 07 Oct 2025 10:34:39 GMT
 # start date:    Fri, 06 Jun 2003 00:00:00
 # that reads "0.0.0.0 machine.domain.tld". This will have the effect of
 # that reads "127.0.0.1 machine.domain.tld". This will have the effect of
@@ -2850,7 +2850,6 @@ xc6b.com##a[href="http://61.160.236.52"]
 ||94.237.93.242^
 ||94.237.99.118^
 ||95.168.170.165^
-||95.179.153.160.host.secureserver.net^
 ||95.181.157.36^
 ||95.181.172.204^
 ||95.211.125.226^
