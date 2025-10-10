@@ -22,13 +22,13 @@ jobs:
 
     - name: Remove old files
       run: |
-        mkdir -p rules/other rules/domain rules/hosts
-        rm -f rules/other/pure_ip.txt
-        rm -f rules/other/pure_domain.txt
-        rm -f rules/domain/a.txt
-        rm -f rules/domain/b.txt
-        rm -f rules/domain/README.md
-        rm -f rules/hosts/hosts.txt
+        mkdir -p other domain hosts
+        rm -f other/pure_ip.txt
+        rm -f other/pure_domain.txt
+        rm -f domain/a.txt
+        rm -f domain/b.txt
+        rm -f domain/README.md
+        rm -f hosts/hosts.txt
 
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
@@ -49,4 +49,4 @@ jobs:
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "chore: Update Comprehensive Rules"
-        file_pattern: "rules/other/pure_ip.txt rules/other/pure_domain.txt rules/domain/a.txt rules/domain/b.txt rules/hosts/hosts.txt rules/domain/README.md"
+        file_pattern: "other/pure_ip.txt other/pure_domain.txt domain/a.txt domain/b.txt hosts/hosts.txt domain/README.md"
