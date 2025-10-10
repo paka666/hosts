@@ -232,20 +232,20 @@ def main():
         ipv4_networks, ipv6_networks = separate_and_sort_ips(consolidated_ips)
         
         # 确保输出目录存在
-        os.makedirs('rules/ip', exist_ok=True)
+        os.makedirs('ip', exist_ok=True)
 
         # 完整列表 - 纯IP/CIDR格式
-        with open('rules/ip/ip-blocklist.txt', 'w', encoding='utf-8') as f:
+        with open('ip/ip-blocklist.txt', 'w', encoding='utf-8') as f:
             for network in ipv4_networks + ipv6_networks:
                 f.write(str(network) + '\n')
         
         # IPv4专用列表 - 纯IP/CIDR格式
-        with open('rules/ip/ipv4-list.txt', 'w', encoding='utf-8') as f:
+        with open('ip/ipv4-list.txt', 'w', encoding='utf-8') as f:
             for network in ipv4_networks:
                 f.write(str(network) + '\n')
         
         # IPv6专用列表 - 纯IP/CIDR格式
-        with open('rules/ip/ipv6-list.txt', 'w', encoding='utf-8') as f:
+        with open('ip/ipv6-list.txt', 'w', encoding='utf-8') as f:
             for network in ipv6_networks:
                 f.write(str(network) + '\n')
 
