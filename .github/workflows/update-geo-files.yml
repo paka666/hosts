@@ -24,8 +24,8 @@ jobs:
 
       - name: remove old files
         run: |
-          rm -rf rules/geo
-          mkdir -p rules/geo
+          rm -rf geo
+          mkdir -p geo
 
       - name: Setup Git config
         run: |
@@ -77,7 +77,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Update Geo Files"
-          file_pattern: "rules/geo/*.txt rules/geo/*.dat"
+          file_pattern: "geo/*.txt geo/*.dat"
 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
