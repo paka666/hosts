@@ -27,8 +27,8 @@ jobs:
 
       - name: remove old files
         run: |
-          mkdir -p rules/hosts
-          rm -f rules/hosts/1024hosts.txt
+          mkdir -p hosts
+          rm -f hosts/1024hosts.txt
 
       - name: Download and process hosts
         run: |
@@ -43,6 +43,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Update 1024Hosts"
-          file_pattern: "rules/hosts/1024hosts.txt"
+          file_pattern: "hosts/1024hosts.txt"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
