@@ -1,0 +1,147 @@
+###J_sideFooter.side_footer
+###MsnDialog.ad
+###\31 x1_container.float-banner-footer
+###_EAPM.TC
+###aafoot.top_box
+###aatop.top_box
+###acook.privacy
+###ad-float.kyty
+###ad1[onclick="window.open(this.url)"]
+###ads.row
+###aeucl.show
+###appad.cate
+###apprecom1.apprecom
+###apprecom2.apprecom
+
+###b-cookie.barre-head
+###banner.cookies
+###banner_links.banner-container
+###bottommob.bottommob
+###cInfo.cInfo
+###cLayer.notice
+###cSpace.cookieSpacer
+###cWarn.cookie
+###cWarn.cookies
+###cc.cc_dialog
+###ccpa.container
+##img[src*=".qpic.cn"][width="980"][height="80"]
+##img[src^="https://images.purevpnaffiliates.com"]
+##img[src^="https://s-img.adskeeper.com/"]
+##ins.adsbygoogle[data-ad-client]
+##ins.adsbygoogle[data-ad-slot]
+##p.alert-cookie
+##script + a[href] > img[src*="lbsugc.cdn.bcebos.com"]
+##script + a[target="_bank"] > img[src*=".c-ctrip.com"][style="width:100%;height:auto;"]
+##script[src$="/base.js"] + #couplet
+##script[src="/js/sy2.js"] + div[align="center"]
+##section.Cookie-notice
+##section.cookie-alert
+##section.cookie-bar
+##section.cookie-consent
+##section.cookie-consent--visible
+##section.cookie-popup
+##section.cookie__privacy
+##section.cookies_banner
+##.uk-container.uk-container-expand
+##.uk-first-column.uk-alert
+##.uk-position-fixed.cookies
+##.uk-position-z-index.uk-position-bottom
+##.uk-width-1-1.adbox
+##.video-holder > a[target="_blank"] > img[src*=".360buyimg.com"]
+##.visible.cookies
+##.visible.scroll-to-top
+##.vjs-overlay.size-300x250
+##.w-100.cookie
+##.w-full > .banner.el-carousel
+##.warning-message.cookie
+##.whatsapp.icon
+##.widget-embed.newsletter
+##.widget.cookies
+##.wrap.mt10.clearfix > .box.top_box
+##.y.mtw[style="padding: 0px 10px;"]
+##.yui3-widget.cooke-popup
+##.zone.zone--loaded
+*.biz5.sandai.net
+*.cpm.cm.sandai.net
+*.cpm360.com
+*.samboc.com
+*.ziye8.com
+-cookie-consent.js
+-didomi.js
+-gdpr-min.js
+-geoIP.js
+-rodo.min.js
+-scroll-tracker.js
+.3.n.2.1.l50.js
+.3.n.2.2.l30.js
+.EuCookieCompliance.min.js
+.beacon.min.js
+.cookielaw.js
+.cookiesdirective.js
+.eloqua.js
+.fbshare.js
+.gatracking.js
+.gdpr.js
+.gdpr.min
+.outbound-links.pageview-props.revenue.tagged-events.js
+.pageview-props.js
+.prod.pr.analytics.console.aws.a2z.com
+.sharebar.js
+.sharing.js
+.skimlinks.js
+.stape.net
+.uk-cookie-consent-js.js
+.z.dkt-ib.com
+0-1-x.6612548.xyz
+0-1-x.8612548.xyz
+0-l.x-tut.space
+0-lx.64365457.xyz
+0-lx.656747882.xyz
+00-coopb144.com
+00-coopban523.com
+00-lhvpromt.com
+000-000-37645t2783296323fn2.calibrescientifics.com
+00080.info
+007d761bc3.nxcli.io
+# [Yahoo][AS26101][68.142.192.0 - 68.142.255.255]
+# [Yahoo][AS26101][98.136.0.0 - 98.139.255.255]
+# [Yahoo][AS36129][206.190.32.0 - 206.190.63.255]
+# [Yahoo][AS36752][68.180.128.0 - 68.180.255.255]
+# [Yandex][AS13238][178.154.131.0 - 178.154.131.255]
+# [Yandex][AS13238][213.180.193.0 - 213.180.193.255]
+# [Yandex][AS13238][87.250.250.0 - 87.250.250.255]
+# [Yesup Ecommerce Solutions][66.48.78.192 - 66.48.78.255]
+# [Yesup Ecommerce Solutions][AS701][66.48.81.128 - 66.48.81.255]
+# [Yesup][AS22923][199.21.148.0 - 199.21.151.255]
+# [ZEDO][AS26914][64.127.125.112 - 64.127.125.127]
+# [Zero Lag][AS20093][68.71.240.0 - 68.71.255.255]
+# [Zero Lag][AS20093][72.37.216.0 - 72.37.217.255]
+# [e Machines / Quinstreet][AS25878][70.42.22.0 - 70.42.23.255]
+# [iWeb Dedicated CL2][70.38.78.96 - 70.38.78.127]
+# [iWeb Dedicated HD][64.15.136.96 - 64.15.136.127]
+# [nLayer][AS4436][108.161.176.0 - 108.161.191.255]
+# [nLayer][AS4436][198.232.112.0 - 198.232.127.255]
+# last updated:   2025-10-09 04:11:51 CEST
+# last updated:   Fri, 10 Oct 2025 07:30:55 GMT
+# last updated:   Sat, 10 May 2025 16:19:19 GMT
+# start date:    Fri, 06 Jun 2003 00:00:00
+# that reads "0.0.0.0 machine.domain.tld". This will have the effect of
+# that reads "127.0.0.1 machine.domain.tld". This will have the effect of
+# this URL:       https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&mimetype=plaintext&useip=0.0.0.0
+##a[href$=".cc:8443"]
+##a[href*="/122.51.121.126:"]
+##a[href*="/137.220.194.105:"]
+#0.0.0.0 aax-eu.amazon-adsystem.com 	# may interfere with Amazon ad preferences
+#0.0.0.0 ad.ca.doubleclick.net	#intereferes with video on globeandmail.com
+#0.0.0.0 ad.doubleclick.net   # This may interefere with www.sears.com
+#0.0.0.0 adfarm.mediaplex.com		# may interfere with ebay
+#0.0.0.0 ads.imeem.com		# Seems to interfere with the functioning of imeem.com
+#0.0.0.0 ads.msn.com			#This may cause problems with zone.msn.com
+#0.0.0.0 ak.imgfarm.com		# may cause problems with iwon.com
+#0.0.0.0 appleglobal.112.2o7.net	#breaks apple.com
+#0.0.0.0 applestoreus.112.2o7.net	#breaks apple.com
+#0.0.0.0 auto.search.msn.com  # Microsoft uses this server to redirect
+#0.0.0.0 ci-mpsnare.iovation.com	# See http://www.codingthewheel.com/archives/online-gambling-privacy-iesnare
+#0.0.0.0 click.linksynergy.com
+#0.0.0.0 ebay.doubleclick.net		# may interfere with ebay
+#0.0.0.0 global.msads.net		#This may cause problems with zone.msn.com
