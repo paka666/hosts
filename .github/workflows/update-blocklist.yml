@@ -12,7 +12,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
 
@@ -38,6 +37,13 @@ jobs:
       - name: Download and rename
         run: |
           curl -s -L -o hosts/sysctl_hosts.txt "https://sysctl.org/cameleon/hosts"
+
+      - name: Commit and push downloaded hosts immediately
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update downloaded hosts file - $(date +'%Y-%m-%d %H:%M')"
+          file_pattern: "hosts/sysctl_hosts.txt"
+          skip_dirty_check: false
 
       - name: Compile blocklist
         run: hostlist-compiler -c adh/config.json -o adh/blocklist.txt
