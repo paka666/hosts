@@ -2,7 +2,7 @@
   "name": "自定义拦截列表",
   "description": "从包含域名、IP 和 CIDR 的多个源编译的拦截列表。每日更新。",
   "homepage": "https://github.com/paka666/rules",
-  "license": "MIT",
+  "license": "GPLv3",
   "version": "1.0.0",
   "sources": [
     {
