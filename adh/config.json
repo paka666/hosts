@@ -469,7 +469,7 @@
     },
     {
       "name": "hosts - sysctl",
-      "source": "https://raw.githubusercontent.com/paka666/rules/main/tmp/sysctl_hosts.txt",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/hosts/sysctl_hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
