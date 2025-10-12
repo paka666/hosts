@@ -469,7 +469,7 @@
     },
     {
       "name": "hosts list - sysctl",
-      "source": "https://sysctl.org/cameleon/hosts",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/tmp/sysctl_hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
