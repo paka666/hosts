@@ -462,127 +462,127 @@
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - adaway",
+      "name": "hosts - adaway",
       "source": "https://adaway.org/hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - sysctl",
+      "name": "hosts - sysctl",
       "source": "https://raw.githubusercontent.com/paka666/rules/main/tmp/sysctl_hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - winhelp2002",
+      "name": "hosts - winhelp2002",
       "source": "https://winhelp2002.mvps.org/hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - someonewhocares",
+      "name": "hosts - someonewhocares",
       "source": "https://someonewhocares.org/hosts/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - hostsfile",
+      "name": "hosts - hostsfile",
       "source": "https://www.hostsfile.org/Downloads/hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - pgl.yoyo",
+      "name": "hosts - pgl.yoyo",
       "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_2",
+      "name": "hosts - filter_2",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_4",
+      "name": "hosts - filter_4",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_8",
+      "name": "hosts - filter_8",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_8.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_9",
+      "name": "hosts - filter_9",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_9.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_15",
+      "name": "hosts - filter_15",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_15.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_16",
+      "name": "hosts - filter_16",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_16.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_17",
+      "name": "hosts - filter_17",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_17.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_26",
+      "name": "hosts - filter_26",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_26.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - filter_33",
+      "name": "hosts - filter_33",
       "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_33.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - vokins yhosts",
+      "name": "hosts - vokins yhosts",
       "source": "https://raw.githubusercontent.com/vokins/yhosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - yous YousList",
+      "name": "hosts - yous YousList",
       "source": "https://raw.githubusercontent.com/yous/YousList/master/hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - StevenBlack",
+      "name": "hosts - StevenBlack",
       "source": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - Goooler 1024_hosts",
+      "name": "hosts - Goooler 1024_hosts",
       "source": "https://raw.githubusercontent.com/Goooler/1024_hosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - tekintian hosts_ads_block",
+      "name": "hosts - tekintian hosts_ads_block",
       "source": "https://raw.githubusercontent.com/tekintian/hosts_ads_block/master/mobile/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts list - AWAvenue-Ads-Rule-hosts",
+      "name": "hosts - AWAvenue-Ads-Rule-hosts",
       "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
