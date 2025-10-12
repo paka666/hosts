@@ -22,8 +22,10 @@ jobs:
 
       - name: Remove old files
         run: |
+          mkdir -p tmp
           mkdir -p adh
-          rm -f adh/*.txt
+          rm -f tmp/sysctl_hosts.txt
+          rm -f adh/blocklist.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -33,6 +35,10 @@ jobs:
       - name: Install HostlistCompiler
         run: npm install -g @adguard/hostlist-compiler
 
+      - name: Download and rename
+        run: |
+          curl -s -L -o tmp/sysctl_hosts.txt "https://sysctl.org/cameleon/hosts"
+
       - name: Compile blocklist
         run: hostlist-compiler -c adh/config.json -o adh/blocklist.txt
 
@@ -40,4 +46,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Update Blocklist Daily"
-          file_pattern: "adh/*.txt"
+          file_pattern: "adh/blocklist.txt"
