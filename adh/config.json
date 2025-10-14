@@ -1,7 +1,7 @@
 {
   "name": "自定义拦截列表",
   "description": "从包含域名、IP 和 CIDR 的多个源编译的拦截列表。每日更新。",
-  "homepage": "https://github.com/paka666/rules",
+  "homepage": "https://dgithub.xyz/paka666/rules",
   "license": "GPLv3",
   "version": "1.0.0",
   "sources": [
@@ -397,55 +397,55 @@
     },
     {
       "name": "Blocklist - cjx-annoyance",
-      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt",
+      "source": "https://raw.dgithub.xyz/cjx82630/cjxlist/master/cjx-annoyance.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - cjxlist",
-      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjxlist.txt",
+      "source": "https://raw.dgithub.xyz/cjx82630/cjxlist/master/cjxlist.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - cjx-ublock",
-      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-ublock.txt",
+      "source": "https://raw.dgithub.xyz/cjx82630/cjxlist/master/cjx-ublock.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - o0HalfLife0o ad",
-      "source": "https://raw.githubusercontent.com/o0HalfLife0o/list/master/ad.txt",
+      "source": "https://raw.dgithub.xyz/o0HalfLife0o/list/master/ad.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - xinggsf minority-mv",
-      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/minority-mv.txt",
+      "source": "https://raw.dgithub.xyz/xinggsf/Adblock-Plus-Rule/master/minority-mv.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - xinggsf mv",
-      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/mv.txt",
+      "source": "https://raw.dgithub.xyz/xinggsf/Adblock-Plus-Rule/master/mv.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - xinggsf rule",
-      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/rule.txt",
+      "source": "https://raw.dgithub.xyz/xinggsf/Adblock-Plus-Rule/master/rule.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - AWAvenue-Ads-Rule",
-      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
+      "source": "https://raw.dgithub.xyz/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "Blocklist - AWAvenue-Ads-Rule-Replenish",
-      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Replenish.txt",
+      "source": "https://raw.dgithub.xyz/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Replenish.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
@@ -469,7 +469,7 @@
     },
     {
       "name": "hosts - sysctl",
-      "source": "https://raw.githubusercontent.com/paka666/rules/main/hosts/sysctl_hosts.txt",
+      "source": "https://raw.dgithub.xyz/paka666/rules/main/hosts/sysctl_hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
@@ -553,43 +553,41 @@
     },
     {
       "name": "hosts - vokins yhosts",
-      "source": "https://raw.githubusercontent.com/vokins/yhosts/master/hosts",
+      "source": "https://raw.dgithub.xyz/vokins/yhosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "hosts - yous YousList",
-      "source": "https://raw.githubusercontent.com/yous/YousList/master/hosts.txt",
+      "source": "https://raw.dgithub.xyz/yous/YousList/master/hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "hosts - StevenBlack",
-      "source": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+      "source": "https://raw.dgithub.xyz/StevenBlack/hosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "hosts - Goooler 1024_hosts",
-      "source": "https://raw.githubusercontent.com/Goooler/1024_hosts/master/hosts",
+      "source": "https://raw.dgithub.xyz/Goooler/1024_hosts/master/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "hosts - tekintian hosts_ads_block",
-      "source": "https://raw.githubusercontent.com/tekintian/hosts_ads_block/master/mobile/hosts",
+      "source": "https://raw.dgithub.xyz/tekintian/hosts_ads_block/master/mobile/hosts",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
       "name": "hosts - AWAvenue-Ads-Rule-hosts",
-      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
+      "source": "https://raw.dgithub.xyz/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     }
   ],
   "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp", "Deduplicate", "RemoveEmptyLines", "TrimLines", "InsertFinalNewLine"],
-  "exclusions": [
-    "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "233.252.0.0/24", "240.0.0.0/4", "255.255.255.255/32", "::/128", "::1/128", "::ffff:0:0/96", "::ffff:0:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64", "2001::/32", "2001:20::/28", "2001:db8::/32", "2002::/16", "3fff::/20", "5f00::/16", "fc00::/7", "fd00::/8", "fe80::/64", "ff00::/8"
-  ]
+  "exclusions_sources": ["adh/exclusions.txt"]
 }
