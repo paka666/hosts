@@ -10,7 +10,8 @@ white sh.st
 white t.cn
 white url.cn
 white *.app
-
+hanime1.me
+theporndude.com
 @@||puzzles-games-api.gp-prod.conde.digital^|
 @@||news.warhammer.com^|
 @@||prod.impartner.live^|
