@@ -586,6 +586,18 @@
       "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "intranet",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/intranet.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "custom",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/custom.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     }
   ],
   "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp", "Deduplicate", "RemoveEmptyLines", "TrimLines", "InsertFinalNewLine"],
