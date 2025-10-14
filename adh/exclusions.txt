@@ -10,6 +10,7 @@
 ||douyin.com^
 ||weibo.com^
 ||yahoo.com^
+||ggpht.com^
 @@
 $third-party
 $3p
