@@ -23,8 +23,10 @@ jobs:
       - name: Remove old files
         run: |
           mkdir -p hosts
-          mkdir -p adh
+          mkdir -p adh/ip
           rm -f hosts/sysctl_hosts.txt
+          rm -f adh/ip/ipv4.txt
+          rm -f adh/ip/ipv6.txt
           rm -f adh/ip-blocklist.txt
           rm -f adh/domain-blocklist.txt
           rm -f adh/blocklist.txt
@@ -85,3 +87,12 @@ jobs:
         with:
           commit_message: "chore: Update Ip-Blocklist Daily"
           file_pattern: "adh/ip-blocklist.txt"
+
+      - name: Compile ipv4&ipv6 blocklist
+        run: python adh/update_tables.py
+
+      - name: Commit and push ipv4&ipv6 blocklist if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update Ipv4&Ipv6 Blocklist Daily"
+          file_pattern: "adh/ip/ipv4.txt adh/ip/ipv6.txt"
