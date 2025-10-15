@@ -11,7 +11,8 @@ SOURCES = [
     "https://codeload.github.com/firehol/blocklist-ipsets/zip/refs/heads/master",
     "https://raw.githubusercontent.com/bitwire-it/ipblocklist/main/inbound.txt",
     "https://raw.githubusercontent.com/bitwire-it/ipblocklist/main/outbound.txt",
-    "https://raw.githubusercontent.com/paka666/rules/main/adh/intranet2.txt"
+    "https://raw.githubusercontent.com/paka666/rules/main/adh/intranet2.txt",
+    "https://raw.githubusercontent.com/paka666/rules/main/adh/ip-blocklist.txt"
 ]
 
 def download_file(url: str, output_path: Path) -> bool:
