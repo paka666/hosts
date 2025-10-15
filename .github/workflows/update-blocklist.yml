@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
 
@@ -35,6 +36,18 @@ jobs:
 
       - name: Install HostlistCompiler
         run: npm install -g @adguard/hostlist-compiler
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: '**/requirements.txt'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Download and rename
         run: |
@@ -65,7 +78,7 @@ jobs:
           file_pattern: "adh/domain-blocklist.txt"
 
       - name: Compile ip-blocklist
-        run: hostlist-compiler -c adh/config3.json -o adh/ip-blocklist.txt
+        run: python adh/ipblk.py
 
       - name: Commit and push ip-blocklist if changed
         uses: stefanzweifel/git-auto-commit-action@v5
