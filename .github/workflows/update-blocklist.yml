@@ -23,10 +23,10 @@ jobs:
       - name: Remove old files
         run: |
           mkdir -p hosts
-          mkdir -p adh/ip
+          mkdir -p adh
           rm -f hosts/sysctl_hosts.txt
-          rm -f adh/ip/ipv4.txt
-          rm -f adh/ip/ipv6.txt
+          rm -f adh/ipv4.txt
+          rm -f adh/ipv6.txt
           rm -f adh/domain-blocklist.txt
           rm -f adh/blocklist.txt
 
@@ -57,7 +57,7 @@ jobs:
       - name: Commit and push sysctl_hosts if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update sysctl_hosts"
+          commit_message: "chore: update sysctl_hosts"
           file_pattern: "hosts/sysctl_hosts.txt"
 
       - name: Compile blocklist
@@ -66,7 +66,7 @@ jobs:
       - name: Commit and push blocklist if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update Blocklist Daily"
+          commit_message: "chore: update blocklist daily"
           file_pattern: "adh/blocklist.txt"
 
       - name: Compile domain-blocklist
@@ -75,7 +75,7 @@ jobs:
       - name: Commit and push domain-blocklist if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update Domain-Blocklist Daily"
+          commit_message: "chore: update domain-blocklist daily"
           file_pattern: "adh/domain-blocklist.txt"
 
       - name: Compile ipv4&ipv6 blocklist
@@ -84,5 +84,5 @@ jobs:
       - name: Commit and push ipv4&ipv6 blocklist if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update Ipv4&Ipv6 Blocklist Daily"
-          file_pattern: "adh/ip/ipv4.txt adh/ip/ipv6.txt"
+          commit_message: "chore: update ipv4&ipv6 blocklist daily"
+          file_pattern: "adh/ipv4.txt adh/ipv6.txt"
