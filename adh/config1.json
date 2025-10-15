@@ -589,13 +589,13 @@
     },
     {
       "name": "intranet",
-      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/intranet.txt",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/intranet2.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "custom",
-      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/custom.txt",
+      "name": "customBL",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/customBL.txt",
       "type": "adblock",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     }
