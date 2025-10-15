@@ -39,6 +39,7 @@
 /^fe80:(?::[0-9a-f]{0,4}){0,6}%[0-9a-z]+$/
 /^ff[0-9a-f]{2}:/
 # 本地域名
+# 非官方项(如 internal、corp、host、domain、private、lan、home)
 /^([a-z0-9-]+.)?(localhost|test|example|invalid|localdomain|ip6-localhost)$/
 /^([a-z0-9-]+.)?local$/
 /^([a-z0-9-]+.)?home.arpa$/
