@@ -46,7 +46,13 @@ jobs:
           skip_dirty_check: false
 
       - name: Compile blocklist
-        run: hostlist-compiler -c adh/config.json -o adh/blocklist.txt
+        run: hostlist-compiler -c adh/config1.json -o adh/blocklist.txt
+
+      - name: Compile domain-blocklist
+        run: hostlist-compiler -c adh/config2.json -o adh/domain-blocklist.txt
+
+      - name: Compile ip-blocklist
+        run: hostlist-compiler -c adh/config3.json -o adh/ip-blocklist.txt
 
       - name: Commit and push if changed
         uses: stefanzweifel/git-auto-commit-action@v5
