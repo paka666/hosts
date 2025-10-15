@@ -24,6 +24,8 @@ jobs:
           mkdir -p hosts
           mkdir -p adh
           rm -f hosts/sysctl_hosts.txt
+          rm -f adh/ip-blocklist.txt
+          rm -f adh/domain-blocklist.txt
           rm -f adh/blocklist.txt
 
       - name: Set up Node.js
@@ -38,24 +40,35 @@ jobs:
         run: |
           curl -s -L -o hosts/sysctl_hosts.txt "https://sysctl.org/cameleon/hosts"
 
-      - name: Commit and push downloaded hosts immediately
+      - name: Commit and push sysctl_hosts if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update downloaded hosts file - $(date +'%Y-%m-%d %H:%M')"
+          commit_message: "chore: Update sysctl_hosts"
           file_pattern: "hosts/sysctl_hosts.txt"
-          skip_dirty_check: false
 
       - name: Compile blocklist
         run: hostlist-compiler -c adh/config1.json -o adh/blocklist.txt
 
-      - name: Compile domain-blocklist
-        run: hostlist-compiler -c adh/config2.json -o adh/domain-blocklist.txt
-
-      - name: Compile ip-blocklist
-        run: hostlist-compiler -c adh/config3.json -o adh/ip-blocklist.txt
-
-      - name: Commit and push if changed
+      - name: Commit and push blocklist if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Update Blocklist Daily"
           file_pattern: "adh/blocklist.txt"
+
+      - name: Compile domain-blocklist
+        run: hostlist-compiler -c adh/config2.json -o adh/domain-blocklist.txt
+
+      - name: Commit and push domain-blocklist if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update Domain-Blocklist Daily"
+          file_pattern: "adh/domain-blocklist.txt"
+
+      - name: Compile ip-blocklist
+        run: hostlist-compiler -c adh/config3.json -o adh/ip-blocklist.txt
+
+      - name: Commit and push ip-blocklist if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update Ip-Blocklist Daily"
+          file_pattern: "adh/ip-blocklist.txt"
