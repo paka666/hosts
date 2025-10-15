@@ -43,3 +43,15 @@
 /^([a-z0-9-]+.)?local$/
 /^([a-z0-9-]+.)?home.arpa$/
 /^([a-z0-9-]+.)?example.(com|net|org)$/
+
+.local
+.localhost
+.ip6-localhost
+.localdomain
+.test
+.invalid
+.home.arpa
+.example
+.example.com
+.example.net
+.example.org
