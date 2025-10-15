@@ -13,5 +13,5 @@
     }
   ],
   "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp", "Deduplicate", "RemoveEmptyLines", "TrimLines", "InsertFinalNewLine"],
-  "exclusions_sources": ["adh/exclusions.txt"], ["adh/domain-blocklist.txt"]
+  "exclusions_sources": ["adh/exclusions.txt", "adh/domain-blocklist.txt"]
 }
