@@ -2,7 +2,7 @@
 """
 IP列表处理脚本 - 修复版
 从多个来源下载IP列表，合并去重，输出IPv4和IPv6分类文件
-修复了网络合并问题和内存使用优化
+修复了网络合并问题和内存使用优化，移除分批处理
 """
 
 import os
@@ -153,7 +153,7 @@ def is_zip_url(url: str) -> bool:
     return any(zip_indicators)
 
 def consolidate_networks(ip_list: set) -> list:
-    """合并重叠和相邻网段 - 修复版"""
+    """合并重叠和相邻网段 - 修复版，移除分批处理"""
     if not ip_list:
         return []
     
@@ -178,12 +178,12 @@ def consolidate_networks(ip_list: set) -> list:
     
     print(f"IPv4网络数量: {len(ipv4_nets)}, IPv6网络数量: {len(ipv6_nets)}")
     
-    def safe_collapse_networks(networks, network_type="IPv4"):
-        """安全合并网络，避免内存问题和过度合并"""
+    def collapse_networks(networks, network_type="IPv4"):
+        """直接合并网络，不进行分批"""
         if not networks:
             return []
         
-        print(f"开始安全合并 {network_type} 网络...")
+        print(f"开始合并 {network_type} 网络...")
         
         # 过滤掉0.0.0.0/0和::/0等全范围网络
         filtered_networks = []
@@ -201,63 +201,27 @@ def consolidate_networks(ip_list: set) -> list:
         
         print(f"过滤后 {network_type} 网络数量: {len(filtered_networks)}")
         
-        # 分批处理，避免内存问题
-        batch_size = 50000
-        all_collapsed = []
-        
-        for i in range(0, len(filtered_networks), batch_size):
-            batch = filtered_networks[i:i + batch_size]
-            batch_num = i // batch_size + 1
-            total_batches = (len(filtered_networks) - 1) // batch_size + 1
+        try:
+            # 直接对全部网络进行合并
+            sorted_networks = sorted(filtered_networks, key=lambda x: (int(x.network_address), x.prefixlen))
+            collapsed = list(ipaddress.collapse_addresses(sorted_networks))
             
-            if total_batches > 1:
-                print(f"处理批次 {batch_num}/{total_batches}: {len(batch)} 个网络")
+            original_count = len(filtered_networks)
+            collapsed_count = len(collapsed)
+            reduction_ratio = (original_count - collapsed_count) / original_count * 100 if original_count > 0 else 0
             
-            try:
-                # 对批次进行排序后再合并
-                sorted_batch = sorted(batch, key=lambda x: (int(x.network_address), x.prefixlen))
-                collapsed_batch = list(ipaddress.collapse_addresses(sorted_batch))
-                all_collapsed.extend(collapsed_batch)
-                
-                if total_batches > 1:
-                    print(f"  批次合并后: {len(collapsed_batch)} 个网络")
-            except Exception as e:
-                print(f"  批次合并失败，使用原始网络: {e}")
-                all_collapsed.extend(batch)
-        
-        # 如果还有多个批次的结果，进行最终合并
-        if len(all_collapsed) > batch_size:
-            print("进行最终合并...")
-            try:
-                # 对最终结果进行小批量合并
-                final_result = []
-                final_batch_size = 100000
-                
-                for i in range(0, len(all_collapsed), final_batch_size):
-                    final_batch = all_collapsed[i:i + final_batch_size]
-                    try:
-                        collapsed_final = list(ipaddress.collapse_addresses(final_batch))
-                        final_result.extend(collapsed_final)
-                    except Exception as e:
-                        print(f"最终批次合并失败: {e}")
-                        final_result.extend(final_batch)
-                
-                all_collapsed = final_result
-            except Exception as e:
-                print(f"最终合并失败: {e}")
-        
-        original_count = len(filtered_networks)
-        collapsed_count = len(all_collapsed)
-        reduction_ratio = (original_count - collapsed_count) / original_count * 100 if original_count > 0 else 0
-        
-        print(f"{network_type} 合并完成: {original_count} -> {collapsed_count} (减少 {reduction_ratio:.2f}%)")
-        
-        return all_collapsed
+            print(f"{network_type} 合并完成: {original_count} -> {collapsed_count} (减少 {reduction_ratio:.2f}%)")
+            
+            return collapsed
+        except Exception as e:
+            print(f"合并 {network_type} 网络时出错: {e}")
+            print("返回未合并的网络列表")
+            return filtered_networks
     
     try:
-        # 对IPv4和IPv6分别进行安全合并
-        collapsed_v4 = safe_collapse_networks(ipv4_nets, "IPv4")
-        collapsed_v6 = safe_collapse_networks(ipv6_nets, "IPv6")
+        # 对IPv4和IPv6分别进行合并
+        collapsed_v4 = collapse_networks(ipv4_nets, "IPv4")
+        collapsed_v6 = collapse_networks(ipv6_nets, "IPv6")
         
         print(f"最终合并结果: IPv4: {len(collapsed_v4)}, IPv6: {len(collapsed_v6)}")
         return collapsed_v4 + collapsed_v6
