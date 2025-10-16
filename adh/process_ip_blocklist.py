@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-IP列表处理脚本 - 智能合并版
-使用智能合并策略，自动检测稳定状态
+IP列表处理脚本 - 精确合并版
+修复过度合并问题，确保合并准确性
 """
 
 import os
@@ -136,15 +136,15 @@ def is_zip_url(url: str) -> bool:
     """判断URL是否为ZIP文件"""
     return '.zip' in url or ('codeload.github.com' in url and '/zip/' in url)
 
-def smart_collapse_networks(networks: list, network_type: str = "IPv4") -> list:
+def precise_collapse_networks(networks: list, network_type: str = "IPv4") -> list:
     """
-    智能网络合并算法
-    使用分层合并策略，自动检测稳定状态
+    精确网络合并算法
+    避免过度合并，确保合并准确性
     """
     if not networks:
         return []
     
-    print(f"开始智能合并 {network_type} 网络，原始数量: {len(networks)}")
+    print(f"开始精确合并 {network_type} 网络，原始数量: {len(networks)}")
     
     # 过滤全范围网络
     filtered_networks = [net for net in networks if net.prefixlen > 0]
@@ -154,88 +154,84 @@ def smart_collapse_networks(networks: list, network_type: str = "IPv4") -> list:
     
     print(f"过滤后 {network_type} 网络数量: {len(filtered_networks)}")
     
-    def hierarchical_collapse(network_list):
-        """分层合并策略"""
-        if len(network_list) <= 1:
-            return network_list
+    def safe_collapse_batch(network_batch):
+        """安全合并批次，避免过度合并"""
+        try:
+            return list(ipaddress.collapse_addresses(network_batch))
+        except Exception as e:
+            print(f"  批次合并失败，返回原始网络: {e}")
+            return network_batch
+    
+    def iterative_collapse(network_list, max_batch_size=100000):
+        """迭代合并，避免一次性合并过多网络"""
+        if len(network_list) <= max_batch_size:
+            return safe_collapse_batch(network_list)
         
-        # 第一步：按前缀长度分组，优先处理大网段
-        prefix_groups = {}
-        for net in network_list:
-            prefix = net.prefixlen
-            if prefix not in prefix_groups:
-                prefix_groups[prefix] = []
-            prefix_groups[prefix].append(net)
+        # 分批合并，但保持网络顺序
+        batches = [network_list[i:i + max_batch_size] 
+                  for i in range(0, len(network_list), max_batch_size)]
         
-        # 按前缀长度从小到大处理（大网段优先）
         collapsed_result = []
-        processed_prefixes = set()
-        
-        # 从大网段（小前缀值）到小网段（大前缀值）处理
-        for prefix in sorted(prefix_groups.keys()):
-            group_networks = prefix_groups[prefix]
+        for i, batch in enumerate(batches):
+            collapsed_batch = safe_collapse_batch(batch)
+            collapsed_result.extend(collapsed_batch)
             
-            # 对当前前缀组进行合并
-            collapsed_group = list(ipaddress.collapse_addresses(group_networks))
-            
-            # 检查是否能与已处理的网络合并
-            if collapsed_result:
-                # 尝试将当前组合并到已有结果中
-                combined = collapsed_result + collapsed_group
-                try:
-                    newly_collapsed = list(ipaddress.collapse_addresses(combined))
-                    # 如果合并有效果，则更新结果
-                    if len(newly_collapsed) < len(combined):
-                        collapsed_result = newly_collapsed
-                    else:
-                        collapsed_result.extend(collapsed_group)
-                except Exception:
-                    collapsed_result.extend(collapsed_group)
-            else:
-                collapsed_result = collapsed_group
-            
-            processed_prefixes.add(prefix)
+            if len(batches) > 1 and i % 10 == 0:
+                print(f"    处理批次 {i+1}/{len(batches)}: {len(batch)} -> {len(collapsed_batch)}")
         
         return collapsed_result
     
-    # 迭代合并直到稳定
-    previous_count = len(filtered_networks)
-    current_networks = filtered_networks
+    # 第一步：排序网络
+    sorted_networks = sorted(filtered_networks, key=lambda x: (int(x.network_address), x.prefixlen))
+    
+    # 第二步：迭代合并直到稳定
+    previous_count = len(sorted_networks)
+    current_networks = sorted_networks
     iteration = 0
-    max_iterations = 10
-    min_improvement = 0.001  # 0.1%的最小改进阈值
+    max_iterations = 5
+    
+    print(f"  开始迭代合并...")
     
     while iteration < max_iterations:
         iteration += 1
         
-        # 每轮都重新排序以优化合并
-        sorted_networks = sorted(current_networks, key=lambda x: (int(x.network_address), x.prefixlen))
-        
-        # 应用分层合并
-        collapsed = hierarchical_collapse(sorted_networks)
+        # 应用迭代合并
+        collapsed = iterative_collapse(current_networks)
         current_count = len(collapsed)
         
         improvement = (previous_count - current_count) / previous_count if previous_count > 0 else 0
         
-        print(f"  第 {iteration} 轮合并: {previous_count} -> {current_count} (改进: {improvement:.2%})")
+        print(f"    第 {iteration} 轮: {previous_count} -> {current_count} (改进: {improvement:.2%})")
         
         # 检查是否达到稳定状态
-        if current_count == previous_count or improvement < min_improvement:
-            print(f"  达到稳定状态，停止迭代")
+        if current_count == previous_count:
+            print(f"    达到稳定状态，停止迭代")
+            break
+        
+        # 如果合并过度（减少超过90%），说明有问题，回退到上一轮结果
+        if improvement > 0.9:
+            print(f"    警告: 合并过度，可能存在问题，回退到上一轮结果")
+            current_networks = current_networks  # 保持上一轮结果
             break
         
         previous_count = current_count
-        current_networks = collapsed
+        current_networks = sorted(collapsed, key=lambda x: (int(x.network_address), x.prefixlen))
     
     final_count = len(current_networks)
     total_reduction = (len(filtered_networks) - final_count) / len(filtered_networks) * 100
     
-    print(f"{network_type} 智能合并完成: {len(filtered_networks)} -> {final_count} (减少 {total_reduction:.2f}%)")
+    print(f"{network_type} 精确合并完成: {len(filtered_networks)} -> {final_count} (减少 {total_reduction:.2f}%)")
+    
+    # 验证结果
+    if final_count <= 10:
+        print(f"  警告: 合并后网络数量过少，可能存在问题")
+        for net in current_networks:
+            print(f"    保留网络: {net}")
     
     return current_networks
 
 def consolidate_networks(ip_list: set) -> list:
-    """合并重叠和相邻网段 - 智能版"""
+    """合并重叠和相邻网段 - 精确版"""
     if not ip_list:
         return []
     
@@ -261,9 +257,9 @@ def consolidate_networks(ip_list: set) -> list:
     print(f"IPv4网络数量: {len(ipv4_nets)}, IPv6网络数量: {len(ipv6_nets)}")
     
     try:
-        # 对IPv4和IPv6分别进行智能合并
-        collapsed_v4 = smart_collapse_networks(ipv4_nets, "IPv4")
-        collapsed_v6 = smart_collapse_networks(ipv6_nets, "IPv6")
+        # 对IPv4和IPv6分别进行精确合并
+        collapsed_v4 = precise_collapse_networks(ipv4_nets, "IPv4")
+        collapsed_v6 = precise_collapse_networks(ipv6_nets, "IPv6")
         
         print(f"最终合并结果: IPv4: {len(collapsed_v4)}, IPv6: {len(collapsed_v6)}")
         return collapsed_v4 + collapsed_v6
