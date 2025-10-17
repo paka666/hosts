@@ -6,6 +6,12 @@
   "version": "1.0.0",
   "sources": [
     {
+      "name": "Blocklist - malware",
+      "source": "https://raw.githubusercontent.com/stamparm/aux/master/maltrail-malware-domains.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
       "name": "Blocklist - AdGuardSDNSFilter",
       "source": "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt",
       "type": "adblock",
@@ -584,6 +590,12 @@
     {
       "name": "hosts - AWAvenue-Ads-Rule-hosts",
       "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - yoyo-Ads-Rule-hosts",
+      "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts;showintro=0",
       "type": "hosts",
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
