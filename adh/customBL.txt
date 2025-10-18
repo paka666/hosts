@@ -1,6 +1,6 @@
 ||s.click.tmall.com^
 ||111.190.202.64.host.secureserver.net^
-# from https://storage.iblocklist.com/t5j1mwxwpmwt6ihp4iau/files/vh56f2o1h2cnsl5otioj/qlprgwgdkojunfdlzsiv.gz (http://list.iblocklist.com/?list=qlprgwgdkojunfdlzsiv&fileformat=hosts&archiveformat=gz)
+# Reference: https://storage.iblocklist.com/t5j1mwxwpmwt6ihp4iau/files/vh56f2o1h2cnsl5otioj/qlprgwgdkojunfdlzsiv.gz (http://list.iblocklist.com/?list=qlprgwgdkojunfdlzsiv&fileformat=hosts&archiveformat=gz)
 ||0-29.com^
 ||0-2u.com^
 ||0-days.net^
