@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-"""
-IP列表处理脚本 - 优化合并版
-修复批次合并问题，提高合并效率
-"""
-
 import os
+import re
 import zipfile
 import tempfile
 import requests
@@ -20,7 +16,6 @@ SOURCES = [
 ]
 
 def download_file(url: str, output_path: Path) -> bool:
-    """下载文件"""
     try:
         response = requests.get(url, timeout=180, stream=True)
         response.raise_for_status()
@@ -33,7 +28,6 @@ def download_file(url: str, output_path: Path) -> bool:
         return False
 
 def extract_and_clean_zip(zip_path: Path, extract_to: Path) -> bool:
-    """解压ZIP文件并清理非必要文件"""
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
@@ -50,7 +44,6 @@ def extract_and_clean_zip(zip_path: Path, extract_to: Path) -> bool:
         return False
 
 def diff_rules(a_file: str, b_file: str, output_file: str = 'adh/ip-blocklist.txt') -> int:
-    """从blocklist.txt减去domain-blocklist.txt，输出IP规则"""
     b_rules = set()
     a_file, b_file = Path(a_file), Path(b_file)
 
@@ -85,7 +78,6 @@ def diff_rules(a_file: str, b_file: str, output_file: str = 'adh/ip-blocklist.tx
     return ip_count
 
 def extract_ips_from_line(line: str) -> set:
-    """提取单行中的IP或CIDR"""
     line = line.strip()
     if not line or line.startswith(('#', '!')):
         return set()
@@ -99,6 +91,9 @@ def extract_ips_from_line(line: str) -> set:
     try:
         if '/' in line:
             network = ipaddress.ip_network(line, strict=False)
+            # 跳过全范围网段
+            if network.prefixlen == 0:
+                return set()
             return {network}
         else:
             ip_obj = ipaddress.ip_address(line)
@@ -107,7 +102,6 @@ def extract_ips_from_line(line: str) -> set:
         return set()
 
 def process_single_file(file_path: Path) -> set:
-    """处理单个文件，提取有效IP/CIDR"""
     ips = set()
     if not file_path.exists() or file_path.stat().st_size == 0:
         return ips
@@ -117,13 +111,13 @@ def process_single_file(file_path: Path) -> set:
             for line in f:
                 line_ips = extract_ips_from_line(line)
                 ips.update(line_ips)
+                
         return ips
     except Exception as e:
         print(f"处理文件 {file_path} 时出错: {e}")
         return set()
 
 def process_directory(directory: Path) -> set:
-    """处理目录中的所有.ipset/.netset/.txt文件"""
     ips = set()
     file_count = 0
     
@@ -139,97 +133,9 @@ def process_directory(directory: Path) -> set:
     return ips
 
 def is_zip_url(url: str) -> bool:
-    """判断URL是否为ZIP文件"""
-    return '.zip' in url or ('codeload.github.com' in url and '/zip/' in url)
-
-def optimized_collapse(networks: list, network_type: str = "IPv4") -> list:
-    """
-    优化的网络合并算法
-    使用渐进式合并策略，避免内存溢出同时保证合并效果
-    """
-    if not networks:
-        return []
-    
-    print(f"开始优化合并 {network_type} 网络，原始数量: {len(networks)}")
-    
-    # 过滤全范围网络
-    filtered_networks = []
-    for net in networks:
-        if net.prefixlen == 0:
-            print(f"跳过全范围网络: {net}")
-            continue
-        filtered_networks.append(net)
-    
-    if not filtered_networks:
-        return []
-    
-    print(f"过滤后 {network_type} 网络数量: {len(filtered_networks)}")
-    
-    # 第一步：按网络地址排序
-    sorted_networks = sorted(filtered_networks, key=lambda x: (int(x.network_address), x.prefixlen))
-    
-    # 第二步：渐进式合并策略
-    # 先处理大网段，再处理小网段，避免过度合并
-    def progressive_collapse(network_list, max_batch_size=200000):
-        if len(network_list) <= max_batch_size:
-            # 小规模直接合并
-            return list(ipaddress.collapse_addresses(network_list))
-        
-        # 大规模网络：先按前缀长度分组处理
-        prefix_groups = {}
-        for net in network_list:
-            prefix = net.prefixlen
-            if prefix not in prefix_groups:
-                prefix_groups[prefix] = []
-            prefix_groups[prefix].append(net)
-        
-        # 从大网段到小网段逐步合并
-        collapsed_result = []
-        for prefix in sorted(prefix_groups.keys()):
-            group_networks = prefix_groups[prefix]
-            if len(group_networks) > max_batch_size:
-                # 大组内部分批合并
-                batches = [group_networks[i:i + max_batch_size] 
-                          for i in range(0, len(group_networks), max_batch_size)]
-                for batch in batches:
-                    collapsed_batch = list(ipaddress.collapse_addresses(batch))
-                    collapsed_result.extend(collapsed_batch)
-            else:
-                collapsed_group = list(ipaddress.collapse_addresses(group_networks))
-                collapsed_result.extend(collapsed_group)
-        
-        return collapsed_result
-    
-    # 第三步：迭代合并直到稳定
-    previous_count = len(sorted_networks)
-    current_networks = sorted_networks
-    max_iterations = 100
-    iteration = 0
-    
-    while iteration < max_iterations:
-        iteration += 1
-        print(f"  第 {iteration} 轮合并...")
-        
-        collapsed = progressive_collapse(current_networks)
-        current_count = len(collapsed)
-        
-        print(f"    合并后: {previous_count} -> {current_count}")
-        
-        if current_count == previous_count:
-            break  # 达到稳定状态
-        
-        previous_count = current_count
-        current_networks = sorted(collapsed, key=lambda x: (int(x.network_address), x.prefixlen))
-    
-    final_count = len(current_networks)
-    reduction_ratio = (len(filtered_networks) - final_count) / len(filtered_networks) * 100
-    
-    print(f"{network_type} 优化合并完成: {len(filtered_networks)} -> {final_count} (减少 {reduction_ratio:.2f}%)")
-    
-    return current_networks
+    return '.zip' in url or 'codeload.github.com' in url and '/zip/' in url
 
 def consolidate_networks(ip_list: set) -> list:
-    """合并重叠和相邻网段 - 优化版"""
     if not ip_list:
         return []
     
@@ -254,27 +160,33 @@ def consolidate_networks(ip_list: set) -> list:
     
     print(f"IPv4网络数量: {len(ipv4_nets)}, IPv6网络数量: {len(ipv6_nets)}")
     
-    try:
-        # 对IPv4和IPv6分别进行优化合并
-        collapsed_v4 = optimized_collapse(ipv4_nets, "IPv4")
-        collapsed_v6 = optimized_collapse(ipv6_nets, "IPv6")
-        
-        print(f"最终合并结果: IPv4: {len(collapsed_v4)}, IPv6: {len(collapsed_v6)}")
-        return collapsed_v4 + collapsed_v6
-        
-    except Exception as e:
-        print(f"合并网络时发生严重错误: {e}")
-        print("返回未合并的网络列表")
-        return list(network_objects)
+    # 过滤掉全范围网段
+    ipv4_nets = [net for net in ipv4_nets if net.prefixlen > 0]
+    ipv6_nets = [net for net in ipv6_nets if net.prefixlen > 0]
+    
+    print(f"过滤后IPv4: {len(ipv4_nets)}, IPv6: {len(ipv6_nets)}")
+    
+    # 对网段进行排序
+    sorted_ipv4 = sorted(ipv4_nets)
+    sorted_ipv6 = sorted(ipv6_nets)
+    
+    # 合并IPv4
+    collapsed_v4 = list(ipaddress.collapse_addresses(sorted_ipv4))
+    
+    # 合并IPv6
+    collapsed_v6 = list(ipaddress.collapse_addresses(sorted_ipv6))
+    
+    print(f"IPv4 合并完成: {len(ipv4_nets)} -> {len(collapsed_v4)}")
+    print(f"IPv6 合并完成: {len(ipv6_nets)} -> {len(collapsed_v6)}")
+    
+    return collapsed_v4 + collapsed_v6
 
 def separate_and_sort_ips(ip_list: list) -> tuple:
-    """分离IPv4和IPv6并排序"""
     ipv4 = sorted([n for n in ip_list if n.version == 4])
     ipv6 = sorted([n for n in ip_list if n.version == 6])
     return ipv4, ipv6
 
 def write_output_file(filepath: Path, networks: list, is_ipv4: bool):
-    """写入输出文件，单IP不显示/32或/128"""
     with open(filepath, 'w', encoding='utf-8') as f:
         for network in networks:
             if is_ipv4 and network.prefixlen == 32:
@@ -284,24 +196,7 @@ def write_output_file(filepath: Path, networks: list, is_ipv4: bool):
             else:
                 f.write(str(network) + '\n')
 
-def validate_merge_result(original: set, merged: list):
-    """验证合并结果，确保没有遗漏"""
-    print("验证合并结果...")
-    
-    # 将合并后的网络转换为集合用于验证
-    merged_set = set(merged)
-    
-    # 检查是否有网络被过度合并
-    ipv4_merged = [n for n in merged if n.version == 4]
-    ipv6_merged = [n for n in merged if n.version == 6]
-    
-    print(f"验证: 原始IPv4数量: {len([n for n in original if isinstance(n, (ipaddress.IPv4Address, ipaddress.IPv4Network))])}")
-    print(f"验证: 合并后IPv4数量: {len(ipv4_merged)}")
-    print(f"验证: 原始IPv6数量: {len([n for n in original if isinstance(n, (ipaddress.IPv6Address, ipaddress.IPv6Network))])}")
-    print(f"验证: 合并后IPv6数量: {len(ipv6_merged)}")
-
 def main():
-    """主函数"""
     # 确保输出目录存在
     output_dir = Path('adh')
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -350,23 +245,21 @@ def main():
                             # 查找blocklist-ipsets-master目录
                             master_dir = None
                             for item in extract_dir.iterdir():
-                                if item.is_dir() and 'blocklist-ipsets' in item.name:
+                                if item.is_dir() and 'blocklist-ipsets-master' in item.name:
                                     master_dir = item
                                     break
                             
                             if master_dir:
                                 dir_ips = process_directory(master_dir)
-                                all_ips.update(dir_ips)
-                                print(f"处理FireHOL完成: {len(dir_ips)} IPs")
                             else:
-                                print(f"警告: 在 {extract_dir} 中未找到blocklist-ipsets目录")
                                 dir_ips = process_directory(extract_dir)
-                                all_ips.update(dir_ips)
-                                print(f"处理ZIP完成: {len(dir_ips)} IPs")
+                            
+                            all_ips.update(dir_ips)
+                            print(f"处理ZIP完成: {len(dir_ips)} IPs")
                     else:
                         file_ips = process_single_file(file_path)
                         all_ips.update(file_ips)
-                        print(f"处理文本完成: {len(file_ips)} IPs")
+                        print(f"处理文本完成: {url} -> {len(file_ips)} IPs")
                 else:
                     print(f"下载失败: {url}")
 
@@ -384,20 +277,14 @@ def main():
 
     # 合并网段，分离IPv4/IPv6，输出
     consolidated = consolidate_networks(all_ips)
-    
-    # 验证合并结果
-    validate_merge_result(all_ips, consolidated)
-    
     ipv4, ipv6 = separate_and_sort_ips(consolidated)
 
-    output_dir = Path('adh')
-    output_dir.mkdir(parents=True, exist_ok=True)
     write_output_file(output_dir / 'ipv4.txt', ipv4, True)
     write_output_file(output_dir / 'ipv6.txt', ipv6, False)
     
     # 计算文件大小
-    ipv4_size = (output_dir / 'ipv4.txt').stat().st_size / 1024 / 1024
-    ipv6_size = (output_dir / 'ipv6.txt').stat().st_size / 1024 / 1024
+    ipv4_size = (output_dir / 'ipv4.txt').stat().st_size / 1024 / 1024 if (output_dir / 'ipv4.txt').exists() else 0
+    ipv6_size = (output_dir / 'ipv6.txt').stat().st_size / 1024 / 1024 if (output_dir / 'ipv6.txt').exists() else 0
     
     print(f"最终输出: IPv4: {len(ipv4)} 条目 ({ipv4_size:.2f} MB), IPv6: {len(ipv6)} 条目 ({ipv6_size:.2f} MB)")
 
