@@ -60,6 +60,18 @@ jobs:
           commit_message: "chore: update sysctl_hosts"
           file_pattern: "hosts/sysctl_hosts.txt"
 
+      - name: Download and process iblocklist
+        run: |
+          curl -s -L -o iblocklist-hosts.gz "http://list.iblocklist.com/?list=qlprgwgdkojunfdlzsiv&fileformat=hosts&archiveformat=gz"
+          gunzip -c iblocklist-hosts.gz > hosts/iblocklist-hosts.txt
+          rm -f iblocklist-hosts.gz
+
+      - name: Commit and push iblocklist-hosts if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update iblocklist-hosts"
+          file_pattern: "hosts/iblocklist-hosts.txt"
+
       - name: Compile blocklist
         run: hostlist-compiler -c adh/config1.json -o adh/blocklist.txt
 
