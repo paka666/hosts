@@ -25,17 +25,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-#      - name: Download custom files
-#        run: |
-#          # 下载并重命名文件
-#          mkdir -p adh
-#          curl -s -L -o adh/ip.txt ""
+      - name: Download custom files
+        run: |
+          # 下载并重命名文件
+          mkdir -p del
+          curl -s -L -o del/1.gz "http://list.iblocklist.com/?list=ficutxiwawokxlcyoeye&fileformat=p2p&archiveformat=gz"
 
-#      - name: Commit and push if changed
-#        uses: stefanzweifel/git-auto-commit-action@v5
-#        with:
-#          commit_message: "chore: update custom files"
-#          file_pattern: "adh/ip.txt"
+      - name: Commit and push if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update custom files"
+          file_pattern: "del/1.gz"
 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
