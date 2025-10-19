@@ -606,6 +606,12 @@
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
+      "name": "maltrail - domain",
+      "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/domain.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
       "name": "customBL",
       "source": "https://raw.githubusercontent.com/paka666/rules/main/adh/customBL.txt",
       "type": "adblock",
