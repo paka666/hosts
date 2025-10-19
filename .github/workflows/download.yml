@@ -29,7 +29,7 @@ jobs:
         run: |
           # 下载并重命名文件
           mkdir -p adh
-          curl -s -L -o adh/ip.txt "https://nd08je02-dl.wss1.cn/na055b9%2Fi%2F91%2Fi91yna055b9?response-content-disposition=attachment%3B+filename%3D%22ip.txt%22%3B+filename%2A%3Dutf-8%27%27ip.txt&sign=q-sign-algorithm%3Dsha1%26q-ak%3DAKID96nJdhhWHm11lGpUSBpIVTBesra5EUp0%26q-sign-time%3D1760811722%3B1760813606%26q-key-time%3D1760811722%3B1760813606%26q-header-list%3D%26q-url-param-list%3Dresponse-content-disposition%26q-signature%3D151fd7ec3d8c6092afb26168445770b905a898f8"
+          curl -s -L -o adh/ip.txt "https://fkitsz3c-dl.wenxiaozhan.com/na055b9%2Fi%2F91%2Fi91yna055b9?response-content-disposition=attachment%3B+filename%3D%22ip.txt%22%3B+filename%2A%3Dutf-8%27%27ip.txt&sign=q-sign-algorithm%3Dsha1%26q-ak%3DAKID96nJdhhWHm11lGpUSBpIVTBesra5EUp0%26q-sign-time%3D1760848365%3B1760850201%26q-key-time%3D1760848365%3B1760850201%26q-header-list%3D%26q-url-param-list%3Dresponse-content-disposition%26q-signature%3D88a90a6ef3df2bdc8e6fa6135442798e0491daec"
 
       - name: Commit and push if changed
         uses: stefanzweifel/git-auto-commit-action@v5
