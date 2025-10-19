@@ -72,6 +72,27 @@ jobs:
           commit_message: "chore: update iblocklist-hosts"
           file_pattern: "hosts/iblocklist-hosts.txt"
 
+      - name: Download and process Microsoft and Proxy lists
+        run: |
+          curl -s -L -o temp/microsoft-p2p.gz "http://list.iblocklist.com/?list=xshktygkujudfnjfioro&fileformat=p2p&archiveformat=gz"
+          curl -s -L -o temp/microsoft-cidr.gz "http://list.iblocklist.com/?list=xshktygkujudfnjfioro&fileformat=cidr&archiveformat=gz"
+          curl -s -L -o temp/proxy-p2p.gz "http://list.iblocklist.com/?list=xoebmbyexwuiogmbyprb&fileformat=p2p&archiveformat=gz"
+          curl -s -L -o temp/proxy-cidr.gz "http://list.iblocklist.com/?list=xoebmbyexwuiogmbyprb&fileformat=cidr&archiveformat=gz"
+          gunzip -c temp/microsoft-p2p.gz > temp/microsoft-p2p.txt
+          gunzip -c temp/microsoft-cidr.gz > temp/microsoft-cidr.txt
+          gunzip -c temp/proxy-p2p.gz > temp/proxy-p2p.txt
+          gunzip -c temp/proxy-cidr.gz > temp/proxy-cidr.txt
+
+      - name: Process Microsoft and Proxy IP ranges
+        run: |
+          python adh/process_special_ips.py
+
+      - name: Commit and push microsoft and proxy IP lists if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update microsoft and proxy IP lists"
+          file_pattern: "adh/ip-microsoft.txt adh/ip-ibkproxy.txt"
+
       - name: Compile blocklist
         run: hostlist-compiler -c adh/config1.json -o adh/blocklist.txt
 
