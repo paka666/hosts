@@ -1,6 +1,3 @@
-# List distributed by iblocklist.com
-
-127.0.0.1 localhost
 127.0.0.1 0-29.com
 127.0.0.1 0-2u.com
 127.0.0.1 0-days.net
@@ -1394,6 +1391,7 @@
 127.0.0.1 9nannkdksk.cn
 127.0.0.1 9ps.org
 127.0.0.1 9q5.com
+127.0.0.1 _218_.justcounter.com
 127.0.0.1 a--e.com
 127.0.0.1 a-137.com
 127.0.0.1 a-cd.info
@@ -3190,7 +3188,6 @@
 127.0.0.1 ads.ecomsupply.com
 127.0.0.1 ads.economist.com
 127.0.0.1 ads.einmedia.com
-127.0.0.1 ads.elitetrader.com
 127.0.0.1 ads.elitetrader.com
 127.0.0.1 ads.emeraldcoast.com
 127.0.0.1 ads.eog.com
@@ -25972,6 +25969,7 @@
 127.0.0.1 localad.daum.net
 127.0.0.1 localbdsmpersonals.com
 127.0.0.1 localgaypersonals.com
+127.0.0.1 localhost
 127.0.0.1 localhost-loopback.com
 127.0.0.1 localhost.3322.org
 127.0.0.1 localhosts.3322.org
@@ -36711,6 +36709,7 @@
 127.0.0.1 search98.com
 127.0.0.1 search99.com
 127.0.0.1 search999.com
+127.0.0.1 search_fd.php.coolwebsearch.com
 127.0.0.1 searcha.com
 127.0.0.1 searcha.net
 127.0.0.1 searchabc.com
@@ -37418,7 +37417,6 @@
 127.0.0.1 searchzone.net
 127.0.0.1 searchzoomer.com
 127.0.0.1 searchzoomer.zzn.com
-127.0.0.1 search_fd.php.coolwebsearch.com
 127.0.0.1 searhe.com
 127.0.0.1 searscom.112.2o7.net
 127.0.0.1 searsphoto.112.2o7.net
@@ -49700,6 +49698,7 @@
 127.0.0.1 www.9q5.com
 127.0.0.1 www.9ringtone.com
 127.0.0.1 www.9you-88.com
+127.0.0.1 www._218_.justcounter.com
 127.0.0.1 www.a--e.com
 127.0.0.1 www.a-137.com
 127.0.0.1 www.a-cd.info
@@ -72027,6 +72026,7 @@
 127.0.0.1 www.search98.com
 127.0.0.1 www.search99.com
 127.0.0.1 www.search999.com
+127.0.0.1 www.search_fd.php.coolwebsearch.com
 127.0.0.1 www.searcha.com
 127.0.0.1 www.searcha.net
 127.0.0.1 www.searchabc.com
@@ -72703,7 +72703,6 @@
 127.0.0.1 www.searchzone.net
 127.0.0.1 www.searchzoomer.com
 127.0.0.1 www.searchzoomer.zzn.com
-127.0.0.1 www.search_fd.php.coolwebsearch.com
 127.0.0.1 www.searhe.com
 127.0.0.1 www.searsphoto.112.2o7.net
 127.0.0.1 www.searsportrait.112.2o7.net
@@ -80823,7 +80822,6 @@
 127.0.0.1 www.zybisco.com
 127.0.0.1 www.zz3b.info
 127.0.0.1 www.zzztech.com
-127.0.0.1 www._218_.justcounter.com
 127.0.0.1 www0.webstat.com
 127.0.0.1 www03.tracer.jp
 127.0.0.1 www05.tracer.jp
@@ -82610,4 +82608,3 @@
 127.0.0.1 zzvuo.cn
 127.0.0.1 zzz.clickbank.net
 127.0.0.1 zzztech.com
-127.0.0.1 _218_.justcounter.com
