@@ -1,6 +1,0 @@
-aiohttp
-brotlicffi
-py-radix
-requests
-re2
-chardet
