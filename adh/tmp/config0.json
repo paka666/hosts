@@ -1,0 +1,623 @@
+{
+  "name": "自定义拦截列表",
+  "description": "从包含域名、IP 和 CIDR 的多个源编译的拦截列表。每日更新。",
+  "homepage": "https://github.com/paka666/rules",
+  "license": "GPLv3",
+  "version": "1.0.0",
+  "sources": [
+    {
+      "name": "Blocklist - malware",
+      "source": "https://raw.githubusercontent.com/stamparm/aux/master/maltrail-malware-domains.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - AdGuardSDNSFilter",
+      "source": "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_1",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_3",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_3.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_5",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_5.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_6",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_6.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_7",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_10",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_10.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_11",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_11.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_12",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_12.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_13",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_13.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_14",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_14.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_18",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_19",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_19.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_20",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_20.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_21",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_21.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_22",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_22.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_24",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_24.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_25",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_25.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_27",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_27.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_29",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_29.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_30",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_30.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_31",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_31.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_34",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_34.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_35",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_35.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_36",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_36.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_37",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_37.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_39",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_39.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_40",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_40.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_41",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_41.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_42",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_42.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_43",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_43.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_44",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_44.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_45",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_45.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_46",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_46.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_47",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_47.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_48",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_48.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_49",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_49.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_50",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_50.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_51",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_52",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_52.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_53",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_54",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_54.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_55",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_55.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_56",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_56.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_57",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_57.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_59",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_59.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_60",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_60.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_61",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_62",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_62.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_63",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_64",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_64.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_65",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_65.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_66",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_66.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_67",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_68",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_68.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_69",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_69.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_70",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_70.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - filter_71",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_71.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - adrules",
+      "source": "https://adrules.top/dns.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - anti-ad",
+      "source": "https://anti-ad.net/easylist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - easylist",
+      "source": "https://easylist.to/easylist/easylist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - easyprivacy",
+      "source": "https://easylist.to/easylist/easyprivacy.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - fanboy-social",
+      "source": "https://easylist.to/easylist/fanboy-social.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - easylistchina",
+      "source": "https://easylist-downloads.adblockplus.org/easylistchina.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - easylistchina+easylist",
+      "source": "https://easylist-downloads.adblockplus.org/easylistchina+easylist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - cjx-annoyance",
+      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - cjxlist",
+      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjxlist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - cjx-ublock",
+      "source": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-ublock.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - o0HalfLife0o ad",
+      "source": "https://raw.githubusercontent.com/o0HalfLife0o/list/master/ad.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - xinggsf minority-mv",
+      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/minority-mv.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - xinggsf mv",
+      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/mv.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - xinggsf rule",
+      "source": "https://raw.githubusercontent.com/xinggsf/Adblock-Plus-Rule/master/rule.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - AWAvenue-Ads-Rule",
+      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - AWAvenue-Ads-Rule-Replenish",
+      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Replenish.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - fanboy-annoyance",
+      "source": "https://secure.fanboy.co.nz/fanboy-annoyance.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - fanboy-cookiemonster",
+      "source": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - adaway",
+      "source": "https://adaway.org/hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - winhelp2002",
+      "source": "https://winhelp2002.mvps.org/hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - someonewhocares",
+      "source": "https://someonewhocares.org/hosts/hosts",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - hostsfile",
+      "source": "https://www.hostsfile.org/Downloads/hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - pgl.yoyo",
+      "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_2",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_4",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_8",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_8.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_9",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_9.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_15",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_15.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_16",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_16.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_17",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_17.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_26",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_26.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - filter_33",
+      "source": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_33.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - vokins yhosts",
+      "source": "https://raw.githubusercontent.com/vokins/yhosts/master/hosts",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - yous YousList",
+      "source": "https://raw.githubusercontent.com/yous/YousList/master/hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - StevenBlack",
+      "source": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - Goooler 1024_hosts",
+      "source": "https://raw.githubusercontent.com/Goooler/1024_hosts/master/hosts",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - tekintian hosts_ads_block",
+      "source": "https://raw.githubusercontent.com/tekintian/hosts_ads_block/master/mobile/hosts",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - AWAvenue-Ads-Rule-hosts",
+      "source": "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - yoyo-Ads-Rule-hosts",
+      "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "Blocklist - asndrop",
+      "source": "adh/tmp/spamhaus-asndrop.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "customBL",
+      "source": "adh/backup/customBL.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - iblocklist",
+      "source": "adh/tmp/iblocklist-hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "hosts - sysctl",
+      "source": "adh/tmp/sysctl_hosts.txt",
+      "type": "hosts",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    }
+  ],
+  "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp", "Deduplicate", "RemoveEmptyLines", "TrimLines", "InsertFinalNewLine"],
+  "exclusions_sources": ["adh/backup/exclusions.txt"]
+}

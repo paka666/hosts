@@ -1,0 +1,15 @@
+# @@
+# *.app
+# *.flyme.cn
+# *.ggpht.com
+# *.myapp.com
+# *-dnsotls-ds.metric.gstatic.com
+# bit.ly
+# cdn.*.qq.com
+# ds.metric.gstatic.com
+# goo.gl
+# s.click.taobao.com
+# s.click.tmall.com
+# sh.st
+# t.cn
+# url.cn

@@ -1,0 +1,52 @@
+name: Update Comprehensive Rules
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  update-comprehensive-rules:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Remove old files
+      run: |
+        mkdir -p other domain hosts
+        rm -f other/pure_ip.txt
+        rm -f other/pure_domain.txt
+        rm -f domain/a.txt
+        rm -f domain/b.txt
+        rm -f domain/README.md
+        rm -f hosts/hosts.txt
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        cache-dependency-path: '**/requirements.txt'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run comprehensive rule processor
+      run: python domain/process_comprehensive_rules.py
+      
+    - name: Commit and push if changed
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "chore: Update Comprehensive Rules"
+        file_pattern: "other/pure_ip.txt other/pure_domain.txt domain/a.txt domain/b.txt hosts/hosts.txt domain/README.md"

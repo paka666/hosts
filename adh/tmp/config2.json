@@ -1,0 +1,23 @@
+{
+  "name": "自定义拦截domain列表",
+  "description": "从包含domain的多个源编译的拦截列表。每日更新。",
+  "homepage": "https://github.com/paka666/rules",
+  "license": "GPLv3",
+  "version": "1.0.0",
+  "sources": [
+    {
+      "name": "domain-blocklist",
+      "source": "temp/blocklist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    },
+    {
+      "name": "domain-blocklist",
+      "source": "adh/blocklist.txt",
+      "type": "adblock",
+      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
+    }
+  ],
+  "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp", "Deduplicate", "RemoveEmptyLines", "TrimLines", "InsertFinalNewLine"],
+  "exclusions_sources": ["adh/backup/exclusions.txt"]
+}
