@@ -588,12 +588,6 @@
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts - yoyo-Ads-Rule-hosts",
-      "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
-      "type": "hosts",
-      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
-    },
-    {
       "name": "Blocklist - asndrop",
       "source": "adh/tmp/spamhaus-asndrop.txt",
       "type": "adblock",
