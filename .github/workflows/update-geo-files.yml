@@ -36,10 +36,10 @@ jobs:
         run: |
           # 下载并重命名文件
           # geoip 文件
-          curl -s -L -o geo/geoip.dat "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -s -L -o geo/geoip.dat "https://github.com/Loyalsoldier/geoip/releases/latest/download/geoip.dat"
           
           # geosite 文件
-          curl -s -L -o geo/geosite.dat "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -s -L -o geo/geosite.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
           
           # gfwlist 文件（多个来源，需要重命名）
           curl -s -L -o geo/gfwlist_loyalsoldier.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt"
