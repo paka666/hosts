@@ -37,37 +37,37 @@ jobs:
           # 下载并重命名文件
           # geoip 文件
           curl -s -L -o geo/geoip.dat "https://github.com/Loyalsoldier/geoip/releases/latest/download/geoip.dat"
-          
-          # geosite 文件
+
+          # geosite 文件 (https://github.com/MetaCubeX/meta-rules-dat/releases/latest/download/geosite.dat)
           curl -s -L -o geo/geosite.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-          
-          # gfwlist 文件（多个来源，需要重命名）
-          curl -s -L -o geo/gfwlist_loyalsoldier.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt"
-          curl -s -L -o geo/gfwlist_anonymous.txt "https://fastly.jsdelivr.net/gh/YW5vbnltb3Vz/domain-list-community@release/gfwlist.txt"
-          curl -s -L -o geo/gfwlist_loukky.txt "https://fastly.jsdelivr.net/gh/Loukky/gfwlist-by-loukky/gfwlist.txt"
-          curl -s -L -o geo/gfwlist_original.txt "https://fastly.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt"
-          
+
+          # gfwlist 文件
+          curl -s -L -o geo/gfwlist_loyalsoldier.txt "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt"
+          curl -s -L -o geo/gfwlist_anonymous.txt "https://raw.githubusercontent.com/YW5vbnltb3Vz/domain-list-community/release/gfwlist.txt"
+          curl -s -L -o geo/gfwlist_loukky.txt "https://raw.githubusercontent.com/Loukky/gfwlist-by-loukky/master/gfwlist.txt"
+          curl -s -L -o geo/gfwlist_original.txt "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt"
+
           # chnroute 文件（IPv4）
           curl -s -L -o geo/chnroute_clang.txt "https://ispip.clang.cn/all_cn.txt"
-          curl -s -L -o geo/chnroute_gaoyifan.txt "https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt"
+          curl -s -L -o geo/chnroute_gaoyifan.txt "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt"
           curl -s -L -o geo/chnroute_clang_cidr.txt "https://ispip.clang.cn/all_cn_cidr.txt"
-          curl -s -L -o geo/chnroute_soffchen.txt "https://fastly.jsdelivr.net/gh/soffchen/GeoIP2-CN@release/CN-ip-cidr.txt"
-          curl -s -L -o geo/chnroute_hackl0us.txt "https://fastly.jsdelivr.net/gh/Hackl0us/GeoIP2-CN@release/CN-ip-cidr.txt"
-          curl -s -L -o geo/chnroute_blackmatrix7.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_IP_No_IPv6.txt"
-          
+          curl -s -L -o geo/chnroute_soffchen.txt "https://raw.githubusercontent.com/soffchen/GeoIP2-CN/release/CN-ip-cidr.txt"
+          curl -s -L -o geo/chnroute_hackl0us.txt "https://raw.githubusercontent.com/Hackl0us/GeoIP2-CN/release/CN-ip-cidr.txt"
+          curl -s -L -o geo/chnroute_blackmatrix7.txt "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/ChinaMax/ChinaMax_IP_No_IPv6.txt"
+
           # chnroute6 文件（IPv6）
           curl -s -L -o geo/chnroute6_clang_ipv6.txt "https://ispip.clang.cn/all_cn_ipv6.txt"
-          curl -s -L -o geo/chnroute6_gaoyifan.txt "https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china6.txt"
-          curl -s -L -o geo/chnroute6_blackmatrix7.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_IP.txt"
-          
+          curl -s -L -o geo/chnroute6_gaoyifan.txt "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china6.txt"
+          curl -s -L -o geo/chnroute6_blackmatrix7.txt "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/ChinaMax/ChinaMax_IP.txt"
+
           # chnlist 文件
-          curl -s -L -o geo/chnlist_accelerated_domains.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/accelerated-domains.china.conf"
-          curl -s -L -o geo/chnlist_apple_china.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/apple.china.conf"
-          curl -s -L -o geo/chnlist_google_china.txt "https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/google.china.conf"
-          curl -s -L -o geo/chnlist_loyalsoldier_china.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/china-list.txt"
-          curl -s -L -o geo/chnlist_loyalsoldier_apple.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/apple-cn.txt"
-          curl -s -L -o geo/chnlist_loyalsoldier_google.txt "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/google-cn.txt"
-          curl -s -L -o geo/chnlist_blackmatrix7_domain.txt "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMax/ChinaMax_Domain.txt"
+          curl -s -L -o geo/chnlist_accelerated_domains.txt "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
+          curl -s -L -o geo/chnlist_apple_china.txt "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/apple.china.conf"
+          curl -s -L -o geo/chnlist_google_china.txt "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf"
+          curl -s -L -o geo/chnlist_loyalsoldier_china.txt "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/china-list.txt"
+          curl -s -L -o geo/chnlist_loyalsoldier_apple.txt "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/apple-cn.txt"
+          curl -s -L -o geo/chnlist_loyalsoldier_google.txt "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/google-cn.txt"
+          curl -s -L -o geo/chnlist_blackmatrix7_domain.txt "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/ChinaMax/ChinaMax_Domain.txt"
 
           # 显示下载结果
           echo "下载完成，文件列表："
