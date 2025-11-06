@@ -1,7 +1,6 @@
 name: Update Blocklist Daily
 
 on:
-  pull_request:
   push:
     branches:
       - main
