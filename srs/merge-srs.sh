@@ -1,6 +1,6 @@
 #!/bin/sh
 # 安装 Sing-box CLI (如果 Actions 中未安装)
-if ! command -v sing-box > /dev/null; then
+if ! command -v sing-box >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/SagerNet/sing-box/dev-next/install.sh | bash -s -- -y
 fi
 
@@ -940,7 +940,7 @@ merge_group() {
   rm "$LOCAL_FILE"
   i=1
   for url in "${URLS[@]:1}"; do
-    wget "$url" -O "temp/input-$GROUP_NAME-$i.srs"
+    wget "$url" -O "temp/input-$GROUP_NAME-$i.srs" || echo "Warning: Failed to download $url"
     i=$((i+1))
   done
   sing-box rule-set merge -o "srs/$GROUP_NAME.srs" temp/input-$GROUP_NAME-*.srs
@@ -959,8 +959,8 @@ merge_group "network-noncn" "${network_noncn_urls[@]}"
 merge_group "git" "${git_urls[@]}"
 merge_group "private" "${private_urls[@]}"
 
-#git config --global user.name "GitHub Actions"
-#git config --global user.email "actions@github.com"
-#git add srs/*.srs
-#git commit -m "Daily merge update: $(date +%Y-%m-%d)"
-#git push origin main
+# git config --global user.name "GitHub Actions"
+# git config --global user.email "actions@github.com"
+# git add srs/*.srs
+# git commit -m "Daily merge update: $(date +%Y-%m-%d)" || echo "No changes to commit"
+# git push origin main
