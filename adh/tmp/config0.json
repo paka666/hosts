@@ -486,12 +486,6 @@
       "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
     },
     {
-      "name": "hosts - hostsfile",
-      "source": "https://www.hostsfile.org/Downloads/hosts.txt",
-      "type": "hosts",
-      "transformations": ["ConvertToAscii", "RemoveComments", "Compress", "ValidateAllowIp"]
-    },
-    {
       "name": "hosts - pgl.yoyo",
       "source": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
       "type": "hosts",
