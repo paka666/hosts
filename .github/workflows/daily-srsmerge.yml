@@ -25,11 +25,7 @@ jobs:
 
       - name: Install sing-box
         run: |
-          curl -fsSL https://raw.githubusercontent.com/SagerNet/sing-box/main/install.sh | bash -s -- -y
-
-- name: Run Merge Script
-  run: bash srs/merge-srs.sh
-
+          curl -fsSL https://sing-box.app/install.sh | sh
 
       - name: Run merge script
         run: bash srs/merge-srs.sh
