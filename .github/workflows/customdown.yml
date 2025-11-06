@@ -1,7 +1,6 @@
 name: Update Custom Files
 
 on:
-  pull_request:
   push:
     branches:
       - main
