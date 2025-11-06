@@ -1,4 +1,4 @@
-name: Daily SRS Merge
+name: Daily srs merge
 
 on:
   push:
@@ -21,11 +21,10 @@ jobs:
 
       - name: Mkdir
         run: |
-          mkdir -p temp
-          mkdir -p srs
+          mkdir -p temp srs
 
       - name: Run merge script
-        run: sh srs/merge-srs.sh
+        run: bash srs/merge-srs.sh
 
       - name: Commit and push srs if changed
         uses: stefanzweifel/git-auto-commit-action@v5
