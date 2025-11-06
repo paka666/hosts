@@ -23,6 +23,14 @@ jobs:
         run: |
           mkdir -p temp srs
 
+      - name: Install sing-box
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/SagerNet/sing-box/main/install.sh | bash -s -- -y
+
+- name: Run Merge Script
+  run: bash srs/merge-srs.sh
+
+
       - name: Run merge script
         run: bash srs/merge-srs.sh
 
