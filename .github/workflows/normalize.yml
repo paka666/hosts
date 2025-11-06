@@ -1,0 +1,69 @@
+name: Normalize Files (UTF-8 + LF)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 保留完整历史
+
+      - name: Set Git config
+        run: |
+          git config --global core.autocrlf input
+          git config --global core.eol lf
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Ensure .gitattributes exists (LF policy)
+        run: |
+          if [ ! -f .gitattributes ]; then
+            echo '* text eol=lf' > .gitattributes
+          elif ! grep -q 'text eol=lf' .gitattributes; then
+            echo '* text eol=lf' >> .gitattributes
+          fi
+
+      - name: Install encoding tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y dos2unix enca iconv file
+
+      - name: Normalize all text files to UTF-8 + LF
+        shell: bash
+        run: |
+          echo "🔍 Scanning files for encoding and line endings..."
+          find . -type f \
+            -not -path "./.git/*" \
+            -not -path "./.github/*" \
+            -not -path "./node_modules/*" \
+            -not -path "./venv/*" \
+            | while read -r f; do
+              # 检测是否为文本文件
+              if file "$f" | grep -qE "text|script|source"; then
+                # 检测编码
+                encoding=$(file -bi "$f" | sed -n 's/.*charset=\(.*\)$/\1/p')
+                if [ "$encoding" != "utf-8" ] && [ "$encoding" != "us-ascii" ]; then
+                  echo "🧩 Converting $f from $encoding → UTF-8"
+                  iconv -f "$encoding" -t utf-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
+                fi
+                # 统一为 LF 换行符
+                dos2unix "$f" 2>/dev/null || true
+              fi
+            done
+
+      - name: Git normalize commit & push
+        run: |
+          git add --renormalize .
+          if ! git diff --cached --quiet; then
+            git commit -m "Normalize all files to UTF-8 + LF (auto)"
+            git push
+            echo "✅ Normalization done and pushed."
+          else
+            echo "✅ Everything already normalized."
+          fi
