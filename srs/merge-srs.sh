@@ -3,10 +3,6 @@ set -euo pipefail
 
 mkdir -p temp srs
 
-if ! command -v sing-box >/dev/null 2>&1; then
-  curl -fsSL https://raw.githubusercontent.com/SagerNet/sing-box/dev-next/install.sh | bash -s -- -y
-fi
-
 ads_urls=(
   "srs/ads.srs"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-acfun-ads.srs"
