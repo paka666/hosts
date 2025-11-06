@@ -932,25 +932,40 @@ merge_group()
   local TIMESTAMP
   TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
-  if [ ! -f "$LOCAL_FILE" ]; then
-    echo "Warning: local file $LOCAL_FILE not found — creating empty file so merge will proceed."
+  rm -f temp/input-"$GROUP_NAME"-*.srs
+
+  if [ -f "$LOCAL_FILE" ] && [ -s "$LOCAL_FILE" ]; then
+    cp "$LOCAL_FILE" "temp/input-$GROUP_NAME-0.srs"
+  else
+    echo "Warning: local file $LOCAL_FILE not found or is empty. Skipping it as a merge source."
     mkdir -p "$(dirname "$LOCAL_FILE")"
-    : > "$LOCAL_FILE"
   fi
 
-  rm -f temp/input-"$GROUP_NAME"-*.srs
-  cp "$LOCAL_FILE" "temp/input-$GROUP_NAME-0.srs"
-
   local i=1
+  local pids=()
   for url in "${URLS[@]:1}"; do
     if [ -z "$url" ]; then
       continue
     fi
 
-    wget -q --timeout=180 --tries=3 "$url" -O "temp/input-$GROUP_NAME-$i.srs" \
-      || { echo "Warning: failed to download $url (group $GROUP_NAME)"; rm -f "temp/input-$GROUP_NAME-$i.srs"; }
+    local current_i=$i
+    (
+      local file_index=$current_i
+      local output_file="temp/input-$GROUP_NAME-$file_index.srs"
+      wget -q --timeout=180 --tries=3 "$url" -O "$output_file" \
+        || { echo "Warning: failed to download $url (group $GROUP_NAME)"; rm -f "$output_file"; }
+    ) &
+    pids+=($!)
+
     ((i++))
   done
+
+  if [ ${#pids[@]} -gt 0 ]; then
+    echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
+
+    wait "${pids[@]}" 2>/dev/null
+    echo "Downloads for $GROUP_NAME finished."
+  fi
 
   shopt -s nullglob
   local inputs=(temp/input-"$GROUP_NAME"-*.srs)
@@ -962,16 +977,19 @@ merge_group()
   fi
 
   local merged_tmp="temp/merged-$GROUP_NAME.srs"
-
   local config_flags=()
   for input_file in "${inputs[@]}"; do
     config_flags+=("-c" "$input_file")
   done
 
+  echo "Merging ${#inputs[@]} files for group $GROUP_NAME..."
   sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
-  cp -a "$LOCAL_FILE" "$backup"
+  if [ -f "$LOCAL_FILE" ]; then
+    cp -a "$LOCAL_FILE" "$backup"
+  fi
+
   mv -f "$merged_tmp" "$LOCAL_FILE"         
   cp -a "$LOCAL_FILE" "srs/${GROUP_NAME}.srs"
 
