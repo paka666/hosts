@@ -962,7 +962,13 @@ merge_group()
   fi
 
   local merged_tmp="temp/merged-$GROUP_NAME.srs"
-  sing-box rule-set merge -o "$merged_tmp" "${inputs[@]}"
+
+  local config_flags=()
+  for input_file in "${inputs[@]}"; do
+    config_flags+=("-c" "$input_file")
+  done
+
+  sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
   cp -a "$LOCAL_FILE" "$backup"
