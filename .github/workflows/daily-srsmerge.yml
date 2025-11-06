@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+    - main
   schedule:
     - cron: "0 16 * * *"
   workflow_dispatch:
@@ -14,22 +14,22 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+        contents: write
 
     steps:
-      - name: Checkout repository
-      - uses: actions/checkout@v4
+        - name: Checkout repository
+           uses: actions/checkout@v4
 
-      - name: Mkdir
-        run: |
-          mkdir -p temp
-          mkdir -p srs
+        - name: Mkdir
+           run: |
+               mkdir -p temp
+               mkdir -p srs
 
-      - name: Run merge script
-        run: sh srs/merge-srs.sh
+        - name: Run merge script
+           run: sh srs/merge-srs.sh
 
-      - name: Commit and push srs if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: Daily srs merge"
-          file_pattern: "srs/*.srs"
+        - name: Commit and push srs if changed
+           uses: stefanzweifel/git-auto-commit-action@v5
+           with:
+               commit_message: "chore: Daily srs merge"
+               file_pattern: "srs/*.srs"
