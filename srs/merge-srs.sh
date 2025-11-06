@@ -1,10 +1,11 @@
-#!/bin/sh
-# 安装 Sing-box CLI (如果 Actions 中未安装)
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p temp srs
+
 if ! command -v sing-box >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/SagerNet/sing-box/dev-next/install.sh | bash -s -- -y
 fi
-
-mkdir -p srs
 
 ads_urls=(
   "srs/ads.srs"
@@ -926,25 +927,54 @@ private_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-private.srs"
 )
 
-merge_group() {
-  GROUP_NAME=$1
+merge_group()
+{
+  local GROUP_NAME=$1
   shift
-  URLS=("$@")
-  LOCAL_FILE="${URLS[0]}"
+  local URLS=("$@")
+  local LOCAL_FILE="${URLS[0]}"
+  local TIMESTAMP
+  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+
   if [ ! -f "$LOCAL_FILE" ]; then
-    echo "Skipping $GROUP_NAME: no local file $LOCAL_FILE"
-    return
+    echo "Warning: local file $LOCAL_FILE not found — creating empty file so merge will proceed."
+    mkdir -p "$(dirname "$LOCAL_FILE")"
+    : > "$LOCAL_FILE"
   fi
-  mkdir -p temp
+
+  rm -f temp/input-"$GROUP_NAME"-*.srs
   cp "$LOCAL_FILE" "temp/input-$GROUP_NAME-0.srs"
-  rm "$LOCAL_FILE"
-  i=1
+
+  local i=1
   for url in "${URLS[@]:1}"; do
-    wget "$url" -O "temp/input-$GROUP_NAME-$i.srs" || echo "Warning: Failed to download $url"
-    i=$((i+1))
+    if [ -z "$url" ]; then
+      continue
+    fi
+
+    wget -q --timeout=180 --tries=3 "$url" -O "temp/input-$GROUP_NAME-$i.srs" \
+      || { echo "Warning: failed to download $url (group $GROUP_NAME)"; rm -f "temp/input-$GROUP_NAME-$i.srs"; }
+    ((i++))
   done
-  sing-box rule-set merge -o "srs/$GROUP_NAME.srs" temp/input-$GROUP_NAME-*.srs
-  rm temp/input-$GROUP_NAME-*.srs
+
+  shopt -s nullglob
+  local inputs=(temp/input-"$GROUP_NAME"-*.srs)
+  shopt -u nullglob
+
+  if [ "${#inputs[@]}" -eq 0 ]; then
+    echo "Error: no input files available for group $GROUP_NAME — skipping merge."
+    return 1
+  fi
+
+  local merged_tmp="temp/merged-$GROUP_NAME.srs"
+  sing-box rule-set merge -o "$merged_tmp" "${inputs[@]}"
+
+  local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
+  cp -a "$LOCAL_FILE" "$backup"
+  mv -f "$merged_tmp" "$LOCAL_FILE"         
+  cp -a "$LOCAL_FILE" "srs/${GROUP_NAME}.srs"
+
+  rm -f temp/input-"$GROUP_NAME"-*.srs
+  echo "Merged group $GROUP_NAME -> $LOCAL_FILE (backup: $backup)"
 }
 
 merge_group "ads" "${ads_urls[@]}"
