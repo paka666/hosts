@@ -987,22 +987,20 @@ merge_group()
     
     local first=true
     for input_file in "${inputs[@]}"; do
+      local rule_tag="rule_$(basename "$input_file" .srs)"
+      local abs_path
+      abs_path=$(realpath "$input_file")
       if [ "$first" = true ]; then
         first=false
       else
         echo ','
       fi
-      local rule_tag="rule_$(basename "$input_file" .srs)"
-      local abs_path
-      abs_path=$(realpath "$input_file")
-      cat << EOF
-    {
-      "tag": "$rule_tag",
-      "type": "local",
-      "format": "binary",
-      "path": "$abs_path"
-    }
-EOF
+      echo '    {'
+      echo '      "tag": "'"$rule_tag"'",'
+      echo '      "type": "local",'
+      echo '      "format": "binary",'
+      echo '      "path": "'"$abs_path"'"'
+      echo '    }'
     done
     
     echo '  ]'
@@ -1011,10 +1009,25 @@ EOF
 
   echo "Generated config file for $GROUP_NAME with ${#inputs[@]} rule sets"
 
-  if ! python3 -m json.tool "$config_file" > /dev/null 2>&1; then
-    echo "Error: Generated JSON is invalid. Checking the file..."
-    head -20 "$config_file"
-    return 1
+  echo "Validating JSON format..."
+  if command -v jq >/dev/null 2>&1; then
+    if jq empty "$config_file" >/dev/null 2>&1; then
+      echo "JSON validation passed with jq"
+    else
+      echo "Error: JSON validation failed with jq"
+      head -10 "$config_file"
+      return 1
+    fi
+  elif command -v python3 >/dev/null 2>&1; then
+    if python3 -m json.tool "$config_file" >/dev/null 2>&1; then
+      echo "JSON validation passed with python"
+    else
+      echo "Error: JSON validation failed with python"
+      head -10 "$config_file"
+      return 1
+    fi
+  else
+    echo "Warning: No JSON validator available, skipping validation"
   fi
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
@@ -1056,4 +1069,3 @@ merge_group "private" "${private_urls[@]}"
 # git add srs/*.srs
 # git commit -m "Daily merge update: $(date +%Y-%m-%d)" || echo "No changes to commit"
 # git push origin main
-
