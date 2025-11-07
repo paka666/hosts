@@ -528,6 +528,51 @@ private_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-private.json"
 )
 
+validate_and_fix_json() {
+  local file="$1"
+  local group_name="$2"
+
+  if [ ! -f "$file" ] || [ ! -s "$file" ]; then
+    echo "  File not found or empty: $file"
+    return 1
+  fi
+
+  if ! jq empty "$file" 2>/dev/null; then
+    echo "  Invalid JSON in $file, attempting to fix..."
+
+    local temp_file="${file}.fixed"
+
+    if jq '.' "$file" > "$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$file"
+      echo "  Fixed JSON using jq"
+      return 0
+    fi
+
+    if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$file"
+      echo "  Added version to rules array"
+      return 0
+    fi
+
+    if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$file"
+      echo "  Added version field"
+      return 0
+    fi
+    
+    echo "  Could not fix JSON: $file"
+    rm -f "$file" "$temp_file"
+    return 1
+  fi
+
+  if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
+    echo "  Adding version field to $file"
+    jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  fi
+  
+  return 0
+}
+
 merge_group()
 {
   local GROUP_NAME=$1
@@ -567,8 +612,19 @@ merge_group()
       else
 
         echo "Downloading: $url"
-        wget -q --timeout=180 --tries=3 "$url" -O "$output_file" \
-          || { echo "Warning: failed to download $url (group $GROUP_NAME)"; rm -f "$output_file"; }
+        if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
+          echo "  Downloaded: $url"
+        else
+          echo "Warning: failed to download $url (group $GROUP_NAME)"
+          rm -f "$output_file"
+        fi
+      fi
+
+      if [ -f "$output_file" ]; then
+        if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
+          echo "  Removing invalid file: $output_file"
+          rm -f "$output_file"
+        fi
       fi
     ) &
     pids+=($!)
@@ -591,17 +647,38 @@ merge_group()
     return 1
   fi
 
-  echo "Found ${#inputs[@]} input files for group $GROUP_NAME"
+  echo "Found ${#inputs[@]} valid input files for group $GROUP_NAME"
+
+  local valid_inputs=()
+  for input_file in "${inputs[@]}"; do
+    if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
+      valid_inputs+=("$input_file")
+    else
+      echo "  Skipping invalid file: $input_file"
+    fi
+  done
+
+  if [ ${#valid_inputs[@]} -eq 0 ]; then
+    echo "Error: no valid input files after validation for group $GROUP_NAME"
+    return 1
+  fi
+
+  echo "Using ${#valid_inputs[@]} valid files for merging"
 
   local merged_tmp="temp/merged-$GROUP_NAME.json"
   local config_flags=()
-  for input_file in "${inputs[@]}"; do
+  for input_file in "${valid_inputs[@]}"; do
     config_flags+=("-c" "$input_file")
   done
 
-  echo "Merging ${#inputs[@]} files for group $GROUP_NAME..."
+  echo "Merging ${#valid_inputs[@]} files for group $GROUP_NAME..."
   if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
     echo "Error: Failed to merge JSON files for $GROUP_NAME"
+    return 1
+  fi
+
+  if ! validate_and_fix_json "$merged_tmp" "$GROUP_NAME"; then
+    echo "Error: Merged file is invalid"
     return 1
   fi
 
@@ -626,7 +703,6 @@ merge_group()
     fi
     return 1
   fi
-
 
   rm -f temp/input-"$GROUP_NAME"-*.json
   echo "Completed group $GROUP_NAME -> JSON: $LOCAL_JSON_FILE, SRS: $OUTPUT_SRS_FILE"
