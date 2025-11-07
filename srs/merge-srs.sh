@@ -981,6 +981,7 @@ merge_group()
   local config_file="temp/config-$GROUP_NAME.json"
   cat > "$config_file" << EOF
 {
+  "version": 1.12.12,
   "rule_set": [
 EOF
 
@@ -992,12 +993,14 @@ EOF
       echo "," >> "$config_file"
     fi
     local rule_tag="rule_$(basename "$input_file" .srs)"
+    local abs_path
+    abs_path=$(realpath "$input_file")
     cat >> "$config_file" << EOF
     {
       "tag": "$rule_tag",
       "type": "local",
       "format": "binary",
-      "path": "$input_file"
+      "path": "$abs_path"
     }
 EOF
   done
@@ -1008,6 +1011,9 @@ EOF
 EOF
 
   echo "Generated config file for $GROUP_NAME with ${#inputs[@]} rule sets"
+
+  echo "Config file preview (first 100 lines):"
+  head -100 "$config_file"
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
   if [ -f "$LOCAL_SRS_FILE" ]; then
@@ -1020,7 +1026,6 @@ EOF
     cp -a "$LOCAL_SRS_FILE" "srs/${GROUP_NAME}.srs"
   else
     echo "Error: Failed to compile rule set for $GROUP_NAME"
-
     if [ -f "$backup" ]; then
       cp -a "$backup" "$LOCAL_SRS_FILE"
       echo "Restored from backup: $backup"
