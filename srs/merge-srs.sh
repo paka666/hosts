@@ -979,23 +979,23 @@ merge_group()
   echo "Found ${#inputs[@]} input files for group $GROUP_NAME"
 
   local config_file="temp/config-$GROUP_NAME.json"
-  cat > "$config_file" << EOF
-{
-  "version": 1.12.12,
-  "rule_set": [
-EOF
 
-  local first=true
-  for input_file in "${inputs[@]}"; do
-    if [ "$first" = true ]; then
-      first=false
-    else
-      echo "," >> "$config_file"
-    fi
-    local rule_tag="rule_$(basename "$input_file" .srs)"
-    local abs_path
-    abs_path=$(realpath "$input_file")
-    cat >> "$config_file" << EOF
+  {
+    echo '{'
+    echo '  "version": 1.12.12,'
+    echo '  "rule_set": ['
+    
+    local first=true
+    for input_file in "${inputs[@]}"; do
+      if [ "$first" = true ]; then
+        first=false
+      else
+        echo ','
+      fi
+      local rule_tag="rule_$(basename "$input_file" .srs)"
+      local abs_path
+      abs_path=$(realpath "$input_file")
+      cat << EOF
     {
       "tag": "$rule_tag",
       "type": "local",
@@ -1003,17 +1003,19 @@ EOF
       "path": "$abs_path"
     }
 EOF
-  done
-
-  cat >> "$config_file" << EOF
-  ]
-}
-EOF
+    done
+    
+    echo '  ]'
+    echo '}'
+  } > "$config_file"
 
   echo "Generated config file for $GROUP_NAME with ${#inputs[@]} rule sets"
 
-  echo "Config file preview (first 100 lines):"
-  head -100 "$config_file"
+  if ! python3 -m json.tool "$config_file" > /dev/null 2>&1; then
+    echo "Error: Generated JSON is invalid. Checking the file..."
+    head -20 "$config_file"
+    return 1
+  fi
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
   if [ -f "$LOCAL_SRS_FILE" ]; then
