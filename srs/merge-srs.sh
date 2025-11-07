@@ -982,7 +982,7 @@ merge_group()
 
   {
     echo '{'
-    echo '  "version": 1.12.12,'
+    echo '  "version": 1,'
     echo '  "rule_set": ['
     
     local first=true
