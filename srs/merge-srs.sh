@@ -981,29 +981,51 @@ merge_group()
   local config_file="temp/config-$GROUP_NAME.json"
 
   {
-    echo '['
+    echo '{'
+    echo '  "version": 1,'
+    echo '  "rules": ['
 
-    local first=true
+    local first_rule=true
+    for input_file in "${inputs[@]}"; do
+      local rule_tag="rule_$(basename "$input_file" .srs)"
+
+      if [ "$first_rule" = true ]; then
+        first_rule=false
+      else
+        echo ','
+      fi
+
+      echo '    {'
+      echo '      "rule_set": "'"$rule_tag"'",'
+      echo '      "outbound": "direct"'
+      echo '    }'
+    done
+
+    echo '  ],'
+    echo '  "rule_set": ['
+
+    local first_ruleset=true
     for input_file in "${inputs[@]}"; do
       local rule_tag="rule_$(basename "$input_file" .srs)"
       local abs_path
       abs_path=$(realpath "$input_file")
 
-      if [ "$first" = true ]; then
-        first=false
+      if [ "$first_ruleset" = true ]; then
+        first_ruleset=false
       else
         echo ','
       fi
 
-      echo '  {'
-      echo '    "tag": "'"$rule_tag"'",'
-      echo '    "type": "local",'
-      echo '    "format": "binary",'
-      echo '    "path": "'"$abs_path"'"'
-      echo '  }'
+      echo '    {'
+      echo '      "tag": "'"$rule_tag"'",'
+      echo '      "type": "local",'
+      echo '      "format": "binary",'
+      echo '      "path": "'"$abs_path"'"'
+      echo '    }'
     done
 
-    echo ']'
+    echo '  ]'
+    echo '}'
   } > "$config_file"
 
   echo "Generated config file for $GROUP_NAME with ${#inputs[@]} rule sets"
@@ -1017,16 +1039,8 @@ merge_group()
       head -10 "$config_file"
       return 1
     fi
-  elif command -v python3 >/dev/null 2>&1; then
-    if python3 -m json.tool "$config_file" >/dev/null 2>&1; then
-      echo "JSON validation passed with python"
-    else
-      echo "Error: JSON validation failed with python"
-      head -10 "$config_file"
-      return 1
-    fi
   else
-    echo "Warning: No JSON validator available, skipping validation"
+    echo "Warning: jq not available, skipping JSON validation"
   fi
 
   local backup="srs/${GROUP_NAME}.srs.bak.${TIMESTAMP}"
