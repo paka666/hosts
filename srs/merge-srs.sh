@@ -981,30 +981,29 @@ merge_group()
   local config_file="temp/config-$GROUP_NAME.json"
 
   {
-    echo '{'
-    echo '  "version": 1,'
-    echo '  "rule_set": ['
-    
+    echo '['
+
     local first=true
     for input_file in "${inputs[@]}"; do
       local rule_tag="rule_$(basename "$input_file" .srs)"
       local abs_path
       abs_path=$(realpath "$input_file")
+
       if [ "$first" = true ]; then
         first=false
       else
         echo ','
       fi
-      echo '    {'
-      echo '      "tag": "'"$rule_tag"'",'
-      echo '      "type": "local",'
-      echo '      "format": "binary",'
-      echo '      "path": "'"$abs_path"'"'
-      echo '    }'
+
+      echo '  {'
+      echo '    "tag": "'"$rule_tag"'",'
+      echo '    "type": "local",'
+      echo '    "format": "binary",'
+      echo '    "path": "'"$abs_path"'"'
+      echo '  }'
     done
-    
-    echo '  ]'
-    echo '}'
+
+    echo ']'
   } > "$config_file"
 
   echo "Generated config file for $GROUP_NAME with ${#inputs[@]} rule sets"
