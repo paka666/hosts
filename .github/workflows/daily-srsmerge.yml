@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Mkdir
         run: |
@@ -25,7 +27,7 @@ jobs:
 
       - name: Install sing-box
         run: |
-          curl -fsSL https://sing-box.app/install.sh | sh
+          curl -fsSL -H “Authorization: token ${{ secrets.WORKFLOW_TOKEN }}” https://sing-box.app/install.sh | sh
 
       - name: Run merge script
         run: bash srs/merge-srs.sh
