@@ -20,9 +20,9 @@ preprocess_ruleset() {
 
   if [ "$output_type" = "cn" ]; then
     # 从基础文件中移除排除文件中的规则（cn 情况）
-    jq --argfile exclude "$exclude_temp" '
+    jq --slurpfile exclude "$exclude_temp" '
       .rules as $base_rules |
-      $exclude.rules as $exclude_rules |
+      $exclude[0].rules as $exclude_rules |
       {
         version: 1,
         rules: $base_rules | map(
@@ -37,9 +37,9 @@ preprocess_ruleset() {
     ' "$base_temp" > "$output_file"
   else
     # 从基础文件中移除排除文件中的规则（!cn 情况）
-    jq --argfile exclude "$exclude_temp" '
+    jq --slurpfile exclude "$exclude_temp" '
       .rules as $base_rules |
-      $exclude.rules as $exclude_rules |
+      $exclude[0].rules as $exclude_rules |
       {
         version: 1,
         rules: $base_rules | map(
@@ -666,41 +666,41 @@ validate_and_fix_json() {
   local group_name="$2"
 
   if [ ! -f "$file" ] || [ ! -s "$file" ]; then
-    echo "  File not found or empty: $file"
-    return 1
+  echo "  File not found or empty: $file"
+  return 1
   fi
 
   if ! jq empty "$file" 2>/dev/null; then
-    echo "  Invalid JSON in $file, attempting to fix..."
+  echo "  Invalid JSON in $file, attempting to fix..."
 
-    local temp_file="${file}.fixed"
+  local temp_file="${file}.fixed"
 
-    if jq '.' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Fixed JSON using jq"
-      return 0
-    fi
+  if jq '.' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Fixed JSON using jq"
+    return 0
+  fi
 
-    if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Added version to rules array"
-      return 0
-    fi
+  if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Added version to rules array"
+    return 0
+  fi
 
-    if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Added version field"
-      return 0
-    fi
+  if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Added version field"
+    return 0
+  fi
 
-    echo "  Could not fix JSON: $file"
-    rm -f "$file" "$temp_file"
-    return 1
+  echo "  Could not fix JSON: $file"
+  rm -f "$file" "$temp_file"
+  return 1
   fi
 
   if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
-    echo "  Adding version field to $file"
-    jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  echo "  Adding version field to $file"
+  jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
   fi
 
   return 0
@@ -724,51 +724,51 @@ merge_group()
   local i=1
   local pids=()
   for url in "${URLS[@]}"; do
-    if [ -z "$url" ]; then
-      continue
+  if [ -z "$url" ]; then
+    continue
+  fi
+
+  local current_i=$i
+  (
+    local file_index=$current_i
+    local output_file="temp/input-$GROUP_NAME-$file_index.json"
+
+    if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
+
+    if [ -f "$url" ] && [ -s "$url" ]; then
+      cp "$url" "$output_file"
+      echo "Copied local file: $url"
+    else
+      echo "Warning: local file $url not found or empty"
+      rm -f "$output_file"
+    fi
+    else
+
+    echo "Downloading: $url"
+    if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
+      echo "  Downloaded: $url"
+    else
+      echo "Warning: failed to download $url (group $GROUP_NAME)"
+      rm -f "$output_file"
+    fi
     fi
 
-    local current_i=$i
-    (
-      local file_index=$current_i
-      local output_file="temp/input-$GROUP_NAME-$file_index.json"
+    if [ -f "$output_file" ]; then
+    if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
+      echo "  Removing invalid file: $output_file"
+      rm -f "$output_file"
+    fi
+    fi
+  ) &
+  pids+=($!)
 
-      if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
-
-        if [ -f "$url" ] && [ -s "$url" ]; then
-          cp "$url" "$output_file"
-          echo "Copied local file: $url"
-        else
-          echo "Warning: local file $url not found or empty"
-          rm -f "$output_file"
-        fi
-      else
-
-        echo "Downloading: $url"
-        if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
-          echo "  Downloaded: $url"
-        else
-          echo "Warning: failed to download $url (group $GROUP_NAME)"
-          rm -f "$output_file"
-        fi
-      fi
-
-      if [ -f "$output_file" ]; then
-        if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
-          echo "  Removing invalid file: $output_file"
-          rm -f "$output_file"
-        fi
-      fi
-    ) &
-    pids+=($!)
-
-    ((i++))
+  ((i++))
   done
 
   if [ ${#pids[@]} -gt 0 ]; then
-    echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
-    wait "${pids[@]}" 2>/dev/null
-    echo "Downloads for $GROUP_NAME finished."
+  echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
+  wait "${pids[@]}" 2>/dev/null
+  echo "Downloads for $GROUP_NAME finished."
   fi
 
   shopt -s nullglob
@@ -776,24 +776,24 @@ merge_group()
   shopt -u nullglob
 
   if [ "${#inputs[@]}" -eq 0 ]; then
-    echo "Error: no input files available for group $GROUP_NAME — skipping merge."
-    return 1
+  echo "Error: no input files available for group $GROUP_NAME — skipping merge."
+  return 1
   fi
 
   echo "Found ${#inputs[@]} valid input files for group $GROUP_NAME"
 
   local valid_inputs=()
   for input_file in "${inputs[@]}"; do
-    if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
-      valid_inputs+=("$input_file")
-    else
-      echo "  Skipping invalid file: $input_file"
-    fi
+  if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
+    valid_inputs+=("$input_file")
+  else
+    echo "  Skipping invalid file: $input_file"
+  fi
   done
 
   if [ ${#valid_inputs[@]} -eq 0 ]; then
-    echo "Error: no valid input files after validation for group $GROUP_NAME"
-    return 1
+  echo "Error: no valid input files after validation for group $GROUP_NAME"
+  return 1
   fi
 
   echo "Using ${#valid_inputs[@]} valid files for merging"
@@ -801,23 +801,23 @@ merge_group()
   local merged_tmp="temp/merged-$GROUP_NAME.json"
   local config_flags=()
   for input_file in "${valid_inputs[@]}"; do
-    config_flags+=("-c" "$input_file")
+  config_flags+=("-c" "$input_file")
   done
 
   echo "Merging ${#valid_inputs[@]} files for group $GROUP_NAME..."
   if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
-    echo "Error: Failed to merge JSON files for $GROUP_NAME"
-    return 1
+  echo "Error: Failed to merge JSON files for $GROUP_NAME"
+  return 1
   fi
 
   if ! validate_and_fix_json "$merged_tmp" "$GROUP_NAME"; then
-    echo "Error: Merged file is invalid"
-    return 1
+  echo "Error: Merged file is invalid"
+  return 1
   fi
 
   local json_backup="srs/json/${GROUP_NAME}.json.bak.${TIMESTAMP}"
   if [ -f "$LOCAL_JSON_FILE" ]; then
-    cp -a "$LOCAL_JSON_FILE" "$json_backup"
+  cp -a "$LOCAL_JSON_FILE" "$json_backup"
   fi
 
   mkdir -p "$(dirname "$LOCAL_JSON_FILE")"
@@ -826,15 +826,15 @@ merge_group()
 
   echo "Compiling SRS file for $GROUP_NAME..."
   if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
-    echo "Successfully compiled: $OUTPUT_SRS_FILE"
+  echo "Successfully compiled: $OUTPUT_SRS_FILE"
   else
-    echo "Error: Failed to compile SRS for $GROUP_NAME"
+  echo "Error: Failed to compile SRS for $GROUP_NAME"
 
-    if [ -f "$json_backup" ]; then
-      cp -a "$json_backup" "$LOCAL_JSON_FILE"
-      echo "Restored JSON from backup: $json_backup"
-    fi
-    return 1
+  if [ -f "$json_backup" ]; then
+    cp -a "$json_backup" "$LOCAL_JSON_FILE"
+    echo "Restored JSON from backup: $json_backup"
+  fi
+  return 1
   fi
 
   rm -f temp/input-"$GROUP_NAME"-*.json
