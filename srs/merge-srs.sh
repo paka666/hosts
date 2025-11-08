@@ -854,6 +854,14 @@ merge_group "cdn" "${cdn_urls[@]}"
 merge_group "hkmotw" "${hkmotw_urls[@]}"
 merge_group "private" "${private_urls[@]}"
 
+# 清理旧的备份文件（保留最近3个）
+cleanup_old_backups()
+{
+    echo "Cleaning up old backup files..."
+    find srs/json -name "*.bak.*" -type f | sort -r | tail -n +4 | xargs rm -f 2>/dev/null || true
+}
+cleanup_old_backups
+
 echo "All groups processed successfully!"
 echo "JSON files are in: srs/json/"
 echo "SRS files are in: srs/"
