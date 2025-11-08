@@ -372,6 +372,38 @@
         ".pixeldance.com",
         ".coze.com"
       ]
+    },
+    {
+      "domain": [
+        "cdn.jetbrains.com",
+        "download-cdn.jetbrains.com.cn"
+      ],
+      "domain_suffix": [
+        ".cdn.jetbrains.com",
+        ".download-cdn.jetbrains.com.cn"
+      ]
+    },
+    {
+      "domain": "deepseek.com",
+      "domain_suffix": ".deepseek.com"
+    },
+    {
+      "domain": [
+        "aixcoder.com",
+        "nnthink.com"
+      ],
+      "domain_suffix": [
+        ".aixcoder.com",
+        ".nnthink.com"
+      ]
+    },
+    {
+      "domain": [
+        "apple-relay.apple.com",
+        "apple-relay.cloudflare.com",
+        "apple-relay.fastly-edge.com",
+        "apple-relay.mask.apple-dns.net"
+      ]
     }
   ]
 }
