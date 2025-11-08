@@ -23,7 +23,7 @@ jobs:
 
       - name: Mkdir
         run: |
-          mkdir -p temp srs
+          mkdir -p temp srs srs/json
 
       - name: Install dependencies
         run: |
