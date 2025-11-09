@@ -3,6 +3,33 @@ set -euo pipefail
 
 mkdir -p temp srs srs/json srs/json/same
 
+# 检查必要依赖
+check_dependencies() {
+  local deps=("jq" "wget" "sing-box" "python3")
+  local missing=()
+  
+  for dep in "${deps[@]}"; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+      missing+=("$dep")
+    fi
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "Error: Missing dependencies: ${missing[*]}"
+    echo "Please install them before running this script."
+    exit 1
+  fi
+
+  # 检查Python ipaddress模块
+  if ! python3 -c "import ipaddress" >/dev/null 2>&1; then
+    echo "Error: Python ipaddress module is required"
+    exit 1
+  fi
+}
+
+echo "Checking dependencies..."
+check_dependencies
+
 # 预处理阶段
 preprocess_ruleset() {
   local base_url="$1"
@@ -151,11 +178,10 @@ optimize_json_file() {
     return 1
   fi
 
-  # 提取所有可能的字段
+  # 提取所有可能的字段并检查未知字段
   local all_fields
   all_fields=$(jq -r '.rules[0] | keys[]?' "$json_file" 2>/dev/null | sort | uniq)
 
-  # 检查是否有未知字段
   local known_fields=("domain" "domain_suffix" "domain_keyword" "domain_regex" "ip_cidr")
   local unknown_fields=()
 
@@ -170,44 +196,61 @@ optimize_json_file() {
     exit 1
   fi
 
-  # 处理每个规则对象（合并同类项，去重排序）
+  # 第一步：分别处理每个字段，避免循环依赖
   jq '
-    def optimize_rules:
-      if type == "array" then
-        map(optimize_rules)
-      elif type == "object" then
-        . as $rule |
-        reduce ($rule | keys[]) as $key ({};
-          if $key == "domain" then
-            # domain处理：去掉首位.，去重排序，并生成对应的domain_suffix
-            .domain = ($rule.domain | map(if startswith(".") then .[1:] else . end) | unique | sort) |
-            .domain_suffix = ((.domain_suffix // []) + ($rule.domain | map("." + .)) | unique | sort)
-          elif $key == "domain_suffix" then
-            # domain_suffix处理：补齐首位.，去重排序，并生成对应的domain
-            .domain_suffix = ($rule.domain_suffix | map(if startswith(".") then . else "." + . end) | unique | sort) |
-            .domain = ((.domain // []) + ($rule.domain_suffix | map(if startswith(".") then .[1:] else . end)) | unique | sort)
-          elif $key == "ip_cidr" then
-            # ip_cidr处理：暂存，后续Python合并
-            .ip_cidr = ($rule.ip_cidr | unique | sort)
-          else
-            # 其他字段：去重排序
-            .[$key] = ($rule[$key] | unique | sort)
-          end
-        )
-      else
-        .
-      end;
+    # 处理domain：去掉首位的点，去重排序
+    def process_domain: 
+      if . then map(if startswith(".") then .[1:] else . end) | unique | sort else [] end;
+
+    # 处理domain_suffix：确保有首位的点，去重排序  
+    def process_domain_suffix:
+      if . then map(if startswith(".") then . else "." + . end) | unique | sort else [] end;
+
+    # 处理其他字段：去重排序
+    def process_other:
+      if . then unique | sort else [] end;
 
     if .rules then
-      .rules |= optimize_rules
+      .rules |= map(
+        . as $rule |
+        {
+          # 单独处理每个字段
+          domain: ($rule.domain | process_domain),
+          domain_suffix: ($rule.domain_suffix | process_domain_suffix),
+          domain_keyword: ($rule.domain_keyword | process_other),
+          domain_regex: ($rule.domain_regex | process_other),
+          ip_cidr: ($rule.ip_cidr | process_other)
+        }
+      )
     else
       .
     end
   ' "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
 
-  # 添加ip_cidr重叠/相邻网段合并（使用Python ipaddress）
-  local ip_cidr_json=$(jq '.rules[0].ip_cidr' "$json_file")
-  if [ "$ip_cidr_json" != "null" ] && [ "$ip_cidr_json" != "[]" ]; then
+  # 第二步：在domain和domain_suffix之间建立对应关系
+  jq '
+    if .rules then
+      .rules |= map(
+        . as $rule |
+        {
+          # 从domain生成domain_suffix
+          domain_suffix: (($rule.domain_suffix // []) + ($rule.domain | map("." + .)) | unique | sort),
+          # 从domain_suffix生成domain  
+          domain: (($rule.domain // []) + ($rule.domain_suffix | map(if startswith(".") then .[1:] else . end)) | unique | sort),
+          # 其他字段保持不变
+          domain_keyword: ($rule.domain_keyword // []),
+          domain_regex: ($rule.domain_regex // []),
+          ip_cidr: ($rule.ip_cidr // [])
+        }
+      )
+    else
+      .
+    end
+  ' "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
+
+  # 第三步：合并ip_cidr网段
+  local ip_cidr_json=$(jq '.rules[0].ip_cidr // []' "$json_file")
+  if [ "$ip_cidr_json" != "[]" ]; then
     local merged_ip_cidr
     merged_ip_cidr=$(python3 -c "
 import ipaddress
@@ -216,12 +259,15 @@ import sys
 
 try:
     cidrs = json.loads(sys.argv[1])
-    networks = sorted([ipaddress.ip_network(c, strict=False) for c in cidrs])
-    merged = ipaddress.collapse_addresses(networks)
-    print(json.dumps([str(net) for net in merged]))
+    if not cidrs:
+        print('[]')
+    else:
+        networks = sorted([ipaddress.ip_network(c, strict=False) for c in cidrs])
+        merged = ipaddress.collapse_addresses(networks)
+        print(json.dumps([str(net) for net in merged]))
 except Exception as e:
-    print('[]')
-    sys.stderr.write(str(e))
+    print(json.dumps([]))
+    sys.stderr.write('IP CIDR merge error: ' + str(e) + '\n')
 " "$ip_cidr_json")
 
     # 更新回JSON
@@ -229,7 +275,8 @@ except Exception as e:
   fi
 
   local after_size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
-  echo " Optimization completed (after size: $after_size bytes)"
+  local reduction=$((before_size - after_size))
+  echo " Optimization completed (after size: $after_size bytes, reduced: $reduction bytes)"
 }
 
 # 对比CN和!CN分组，找出相同部分，如果same为空不保存
@@ -245,9 +292,15 @@ compare_cn_pairs() {
     return 0
   fi
 
+  # 验证文件格式
+  if ! jq empty "$cn_file" >/dev/null 2>&1 || ! jq empty "$noncn_file" >/dev/null 2>&1; then
+    echo " One or both files have invalid JSON, skipping comparison"
+    return 0
+  fi
+
   # 找出相同部分
   local same_temp="${output_file}.temp"
-  jq -n --argfile cn "$cn_file" --argfile noncn "$noncn_file" '
+  if ! jq -n --argfile cn "$cn_file" --argfile noncn "$noncn_file" '
     def find_common($a; $b):
       if $a and $b then
         $a | map(select(. as $item | $b | index($item)))
@@ -255,22 +308,29 @@ compare_cn_pairs() {
         []
       end;
 
+    def get_field($file; $field):
+      if $file.rules[0][$field] then $file.rules[0][$field] else [] end;
+
     {
       version: 1,
       rules: [
         {
-          domain: find_common($cn.rules[0].domain; $noncn.rules[0].domain),
-          domain_suffix: find_common($cn.rules[0].domain_suffix; $noncn.rules[0].domain_suffix),
-          domain_keyword: find_common($cn.rules[0].domain_keyword; $noncn.rules[0].domain_keyword),
-          domain_regex: find_common($cn.rules[0].domain_regex; $noncn.rules[0].domain_regex),
-          ip_cidr: find_common($cn.rules[0].ip_cidr; $noncn.rules[0].ip_cidr)
+          domain: find_common(get_field($cn; "domain"); get_field($noncn; "domain")),
+          domain_suffix: find_common(get_field($cn; "domain_suffix"); get_field($noncn; "domain_suffix")),
+          domain_keyword: find_common(get_field($cn; "domain_keyword"); get_field($noncn; "domain_keyword")),
+          domain_regex: find_common(get_field($cn; "domain_regex"); get_field($noncn; "domain_regex")),
+          ip_cidr: find_common(get_field($cn; "ip_cidr"); get_field($noncn; "ip_cidr"))
         }
       ]
     }
-  ' > "$same_temp"
+  ' > "$same_temp" 2>/dev/null; then
+    echo " Failed to compare files, skipping"
+    rm -f "$same_temp"
+    return 0
+  fi
 
-  # 检查same是否为空（所有字段长度和为0）
-  local is_empty=$(jq '.rules[0] | [(.domain? // [] | length), (.domain_suffix? // [] | length), (.domain_keyword? // [] | length), (.domain_regex? // [] | length), (.ip_cidr? // [] | length)] | add == 0' "$same_temp")
+  # 检查same是否为空
+  local is_empty=$(jq '[.rules[0][] | length] | add == 0' "$same_temp" 2>/dev/null || echo "true")
   if [ "$is_empty" = "true" ]; then
     echo " No common parts found, skipping save to $output_file"
     rm -f "$same_temp"
@@ -279,22 +339,19 @@ compare_cn_pairs() {
 
   mv "$same_temp" "$output_file"
 
-  # 从原文件中移除相同部分
-  jq --argfile common "$output_file" '
-    .rules[0].domain = (.rules[0].domain - $common.rules[0].domain) |
-    .rules[0].domain_suffix = (.rules[0].domain_suffix - $common.rules[0].domain_suffix) |
-    .rules[0].domain_keyword = (.rules[0].domain_keyword - $common.rules[0].domain_keyword) |
-    .rules[0].domain_regex = (.rules[0].domain_regex - $common.rules[0].domain_regex) |
-    .rules[0].ip_cidr = (.rules[0].ip_cidr - $common.rules[0].ip_cidr)
-  ' "$cn_file" > "${cn_file}.tmp" && mv "${cn_file}.tmp" "$cn_file"
-
-  jq --argfile common "$output_file" '
-    .rules[0].domain = (.rules[0].domain - $common.rules[0].domain) |
-    .rules[0].domain_suffix = (.rules[0].domain_suffix - $common.rules[0].domain_suffix) |
-    .rules[0].domain_keyword = (.rules[0].domain_keyword - $common.rules[0].domain_keyword) |
-    .rules[0].domain_regex = (.rules[0].domain_regex - $common.rules[0].domain_regex) |
-    .rules[0].ip_cidr = (.rules[0].ip_cidr - $common.rules[0].ip_cidr)
-  ' "$noncn_file" > "${noncn_file}.tmp" && mv "${noncn_file}.tmp" "$noncn_file"
+  # 从原文件中移除相同部分（使用更安全的方法）
+  for file in "$cn_file" "$noncn_file"; do
+    jq --argfile common "$output_file" '
+      def remove_common($arr; $common_arr):
+        if $arr and $common_arr then $arr - $common_arr else $arr end;
+      
+      .rules[0].domain = remove_common(.rules[0].domain; $common.rules[0].domain) |
+      .rules[0].domain_suffix = remove_common(.rules[0].domain_suffix; $common.rules[0].domain_suffix) |
+      .rules[0].domain_keyword = remove_common(.rules[0].domain_keyword; $common.rules[0].domain_keyword) |
+      .rules[0].domain_regex = remove_common(.rules[0].domain_regex; $common.rules[0].domain_regex) |
+      .rules[0].ip_cidr = remove_common(.rules[0].ip_cidr; $common.rules[0].ip_cidr)
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  done
 
   echo " Comparison completed, common parts saved to: $output_file"
 }
@@ -1008,7 +1065,7 @@ merge_group()
   return 1
   fi
 
-  # 在编译SRS前进行优化（操作a）
+  # 在编译SRS前进行优化
   echo "Optimizing merged JSON before compilation..."
   optimize_json_file "$merged_tmp"
 
@@ -1064,10 +1121,35 @@ cleanup_old_backups()
 }
 cleanup_old_backups
 
+# 添加文件大小统计函数
+print_size_stats() {
+  echo "=== File Size Statistics ==="
+  local total_before=0
+  local total_after=0
+
+  for json_file in srs/json/*.json; do
+    if [ -f "$json_file" ]; then
+      local size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
+      local name=$(basename "$json_file")
+      echo "  $name: $size bytes"
+    fi
+  done
+
+  echo "=== SRS File Statistics ==="
+  for srs_file in srs/*.srs; do
+    if [ -f "$srs_file" ]; then
+      local size=$(stat -c %s "$srs_file" 2>/dev/null || echo 0)
+      local name=$(basename "$srs_file")
+      echo "  $name: $size bytes"
+    fi
+  done
+}
+
 echo "All groups processed successfully!"
 echo "JSON files are in: srs/json/"
 echo "SRS files are in: srs/"
 echo "Common parts are in: srs/json/same/"
+print_size_stats
 
 # git config --global user.name "GitHub Actions"
 # git config --global user.email "actions@github.com"
