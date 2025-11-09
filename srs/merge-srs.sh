@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 mkdir -p temp srs srs/json srs/json/same
 
 # 检查必要依赖
 check_dependencies() {
   local deps=("jq" "wget" "sing-box" "python3")
   local missing=()
-  
   for dep in "${deps[@]}"; do
     if ! command -v "$dep" >/dev/null 2>&1; then
       missing+=("$dep")
     fi
   done
-
   if [ ${#missing[@]} -gt 0 ]; then
     echo "Error: Missing dependencies: ${missing[*]}"
     echo "Please install them before running this script."
     exit 1
   fi
-
   # 检查Python ipaddress模块
   if ! python3 -c "import ipaddress" >/dev/null 2>&1; then
     echo "Error: Python ipaddress module is required"
@@ -160,7 +156,7 @@ done
 
 echo "Preprocessing completed!"
 
-# 优化JSON文件，去重排序合并，ip_cidr合并
+# 优化的JSON文件处理函数，避免参数过长
 optimize_json_file() {
   local json_file="$1"
   local temp_file="${json_file}.tmp"
@@ -178,113 +174,102 @@ optimize_json_file() {
     return 1
   fi
 
-  # 提取所有可能的字段并检查未知字段
-  local all_fields
-  all_fields=$(jq -r '.rules[0] | keys[]?' "$json_file" 2>/dev/null | sort | uniq)
+  # 创建临时jq脚本文件来处理大文件
+  local jq_script="temp/optimize_$$.jq"
+  cat > "$jq_script" << 'EOF'
+# 确保输入是数组，处理字符串和数组混合的情况
+def ensure_array:
+  if . == null then []
+  elif type == "string" then [.]
+  elif type == "array" then
+    map(if type == "string" then . else tostring end)
+  else [tostring] end;
+# 处理domain：去掉首位的点，去重排序
+def process_domain:
+  ensure_array | map(if startswith(".") then .[1:] else . end) | unique | sort;
+# 处理domain_suffix：确保有首位的点，去重排序
+def process_domain_suffix:
+  ensure_array | map(if startswith(".") then . else "." + . end) | unique | sort;
+# 处理其他字段：去重排序
+def process_other:
+  ensure_array | unique | sort;
+if .rules then
+  .rules |= map(
+    . as $rule |
+    {
+      # 单独处理每个字段，使用空数组作为默认值
+      domain: (($rule.domain // []) | process_domain),
+      domain_suffix: (($rule.domain_suffix // []) | process_domain_suffix),
+      domain_keyword: (($rule.domain_keyword // []) | process_other),
+      domain_regex: (($rule.domain_regex // []) | process_other),
+      ip_cidr: (($rule.ip_cidr // []) | process_other)
+    }
+  )
+else
+  .
+end
+EOF
 
-  local known_fields=("domain" "domain_suffix" "domain_keyword" "domain_regex" "ip_cidr")
-  local unknown_fields=()
-
-  for field in $all_fields; do
-    if [[ ! " ${known_fields[@]} " =~ " ${field} " ]]; then
-      unknown_fields+=("$field")
-    fi
-  done
-
-  if [ ${#unknown_fields[@]} -gt 0 ]; then
-    echo " Error: Unknown fields found: ${unknown_fields[*]}. Stopping script to update."
-    exit 1
+  # 使用文件方式执行jq脚本，避免参数过长
+  if ! jq -f "$jq_script" "$json_file" > "$temp_file"; then
+    echo " Error in first optimization step"
+    rm -f "$jq_script" "$temp_file"
+    return 1
   fi
+  mv "$temp_file" "$json_file"
 
-  # 修复的jq处理逻辑 - 处理字符串和数组的混合情况
-  jq '
-    # 确保输入是数组，处理字符串和数组混合的情况
-    def ensure_array:
-      if . == null then []
-      elif type == "string" then [.]
-      elif type == "array" then 
-        map(if type == "string" then . else tostring end)
-      else [tostring] end;
+  # 第二步优化
+  cat > "$jq_script" << 'EOF'
+def ensure_array:
+  if . == null then []
+  elif type == "string" then [.]
+  elif type == "array" then
+    map(if type == "string" then . else tostring end)
+  else [tostring] end;
+if .rules then
+  .rules |= map(
+    . as $rule |
+    {
+      # 从domain生成domain_suffix
+      domain_suffix: ((($rule.domain_suffix // []) | ensure_array) + (($rule.domain // []) | ensure_array | map("." + .)) | unique | sort),
+      # 从domain_suffix生成domain
+      domain: ((($rule.domain // []) | ensure_array) + (($rule.domain_suffix // []) | ensure_array | map(if startswith(".") then .[1:] else . end)) | unique | sort),
+      # 其他字段保持不变
+      domain_keyword: ($rule.domain_keyword // []) | ensure_array,
+      domain_regex: ($rule.domain_regex // []) | ensure_array,
+      ip_cidr: ($rule.ip_cidr // []) | ensure_array
+    }
+  )
+else
+  .
+end
+EOF
 
-    # 处理domain：确保是数组，去掉首位的点，去重排序
-    def process_domain: 
-      ensure_array | map(if startswith(".") then .[1:] else . end) | unique | sort;
+  if ! jq -f "$jq_script" "$json_file" > "$temp_file"; then
+    echo " Error in second optimization step"
+    rm -f "$jq_script" "$temp_file"
+    return 1
+  fi
+  mv "$temp_file" "$json_file"
+  rm -f "$jq_script"
 
-    # 处理domain_suffix：确保是数组，确保有首位的点，去重排序  
-    def process_domain_suffix:
-      ensure_array | map(if startswith(".") then . else "." + . end) | unique | sort;
-
-    # 处理其他字段：确保是数组，去重排序
-    def process_other:
-      ensure_array | unique | sort;
-
-    if .rules then
-      .rules |= map(
-        . as $rule |
-        {
-          # 单独处理每个字段，使用空数组作为默认值
-          domain: (($rule.domain // []) | process_domain),
-          domain_suffix: (($rule.domain_suffix // []) | process_domain_suffix),
-          domain_keyword: (($rule.domain_keyword // []) | process_other),
-          domain_regex: (($rule.domain_regex // []) | process_other),
-          ip_cidr: (($rule.ip_cidr // []) | process_other)
-        }
-      )
-    else
-      .
-    end
-  ' "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
-
-  # 第二步：在domain和domain_suffix之间建立对应关系
-  jq '
-    def ensure_array:
-      if . == null then []
-      elif type == "string" then [.]
-      elif type == "array" then 
-        map(if type == "string" then . else tostring end)
-      else [tostring] end;
-
-    if .rules then
-      .rules |= map(
-        . as $rule |
-        {
-          # 从domain生成domain_suffix
-          domain_suffix: ((($rule.domain_suffix // []) | ensure_array) + (($rule.domain // []) | ensure_array | map("." + .)) | unique | sort),
-          # 从domain_suffix生成domain  
-          domain: ((($rule.domain // []) | ensure_array) + (($rule.domain_suffix // []) | ensure_array | map(if startswith(".") then .[1:] else . end)) | unique | sort),
-          # 其他字段保持不变
-          domain_keyword: ($rule.domain_keyword // []) | ensure_array,
-          domain_regex: ($rule.domain_regex // []) | ensure_array,
-          ip_cidr: ($rule.ip_cidr // []) | ensure_array
-        }
-      )
-    else
-      .
-    end
-  ' "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
-
-  # 第三步：合并ip_cidr网段 - 使用文件传递数据避免参数过长
+  # 合并ip_cidr网段
   local ip_cidr_json=$(jq '.rules[0].ip_cidr // []' "$json_file")
   if [ "$ip_cidr_json" != "[]" ] && [ "$ip_cidr_json" != "null" ]; then
-    # 创建临时文件来传递数据，避免参数过长
     local ip_temp_file="temp/ip_cidr_$$.json"
     echo "$ip_cidr_json" > "$ip_temp_file"
-
     local merged_ip_cidr
     merged_ip_cidr=$(python3 -c "
 import ipaddress
 import json
 import sys
-
 def merge_ip_cidrs(ip_list):
     try:
         if not ip_list:
             return []
-
         # 分离IPv4和IPv6
         ipv4_networks = []
         ipv6_networks = []
-
         for ip_cidr in ip_list:
             try:
                 network = ipaddress.ip_network(ip_cidr, strict=False)
@@ -293,20 +278,17 @@ def merge_ip_cidrs(ip_list):
                 else:
                     ipv6_networks.append(network)
             except ValueError as e:
-                # 忽略无效的CIDR
+                print(f'Invalid CIDR skipped: {ip_cidr} ({e})', file=sys.stderr)
                 continue
-
         # 分别合并IPv4和IPv6
-        merged_ipv4 = list(ipaddress.collapse_addresses(ipv4_networks))
-        merged_ipv6 = list(ipaddress.collapse_addresses(ipv6_networks))
-
+        merged_ipv4 = list(ipaddress.collapse_addresses(sorted(ipv4_networks)))
+        merged_ipv6 = list(ipaddress.collapse_addresses(sorted(ipv6_networks)))
         # 合并结果
         result = [str(net) for net in merged_ipv4 + merged_ipv6]
         return result
     except Exception as e:
         print(f'Error merging IP CIDRs: {e}', file=sys.stderr)
-        return ip_list  # 出错时返回原列表
-
+        return ip_list
 # 从文件读取数据
 try:
     with open(sys.argv[1], 'r') as f:
@@ -317,10 +299,7 @@ except Exception as e:
     print('[]')
     print(f'File processing error: {e}', file=sys.stderr)
 " "$ip_temp_file")
-
-    # 清理临时文件
     rm -f "$ip_temp_file"
-
     # 更新回JSON
     if [ "$merged_ip_cidr" != "[]" ]; then
       jq ".rules[0].ip_cidr = $merged_ip_cidr" "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
@@ -332,130 +311,87 @@ except Exception as e:
   echo " Optimization completed (after size: $after_size bytes, reduced: $reduction bytes)"
 }
 
-# 修复的对比CN和!CN分组函数
+# 操作a：对比CN和!CN分组，找出相同部分
 compare_cn_pairs() {
   local cn_file="$1"
   local noncn_file="$2"
   local output_file="$3"
-
   echo "Comparing CN pairs: $cn_file vs $noncn_file"
-
   if [ ! -f "$cn_file" ] || [ ! -f "$noncn_file" ]; then
     echo " One or both files not found, skipping comparison"
     return 0
   fi
-
   # 验证文件格式
   if ! jq empty "$cn_file" >/dev/null 2>&1 || ! jq empty "$noncn_file" >/dev/null 2>&1; then
     echo " One or both files have invalid JSON, skipping comparison"
     return 0
   fi
-
-  # 调试信息：显示文件大小
+  # DEBUG: 显示文件大小
   local cn_size=$(stat -c %s "$cn_file" 2>/dev/null || echo 0)
   local noncn_size=$(stat -c %s "$noncn_file" 2>/dev/null || echo 0)
   echo " File sizes - CN: $cn_size bytes, !CN: $noncn_size bytes"
-
   # 找出相同部分
   local same_temp="${output_file}.temp"
-
-  # 使用更健壮的对比逻辑
-  if ! jq -n --argfile cn "$cn_file" --argfile noncn "$noncn_file" '
-    # 安全获取字段，处理可能不存在的字段
-    def safe_get_field($file; $field):
-      if $file.rules and ($file.rules | length > 0) and $file.rules[0][$field] then 
-        $file.rules[0][$field] 
-      else 
-        [] 
-      end;
-
-    # 查找共同元素
+  if ! jq -n --slurpfile cn "$cn_file" --slurpfile noncn "$noncn_file" '
     def find_common($a; $b):
-      if ($a | length == 0) or ($b | length == 0) then
-        []
+      if $a and $b then
+        $a | map(select(. as $item | $b | index($item)))
       else
-        $a | [.[] | select(IN($b[]))]
+        []
       end;
-
-    # 获取两个文件的所有字段
-    ($cn | safe_get_field(.; "domain")) as $cn_domain |
-    ($noncn | safe_get_field(.; "domain")) as $noncn_domain |
-    ($cn | safe_get_field(.; "domain_suffix")) as $cn_domain_suffix |
-    ($noncn | safe_get_field(.; "domain_suffix")) as $noncn_domain_suffix |
-    ($cn | safe_get_field(.; "domain_keyword")) as $cn_domain_keyword |
-    ($noncn | safe_get_field(.; "domain_keyword")) as $noncn_domain_keyword |
-    ($cn | safe_get_field(.; "domain_regex")) as $cn_domain_regex |
-    ($noncn | safe_get_field(.; "domain_regex")) as $noncn_domain_regex |
-    ($cn | safe_get_field(.; "ip_cidr")) as $cn_ip_cidr |
-    ($noncn | safe_get_field(.; "ip_cidr")) as $noncn_ip_cidr |
-
-    # 计算共同部分
+    def get_field($file; $field):
+      if $file[0].rules and ($file[0].rules | length > 0) and $file[0].rules[0][$field] then
+        $file[0].rules[0][$field]
+      else
+        []
+      end;
     {
       version: 1,
       rules: [
         {
-          domain: find_common($cn_domain; $noncn_domain),
-          domain_suffix: find_common($cn_domain_suffix; $noncn_domain_suffix),
-          domain_keyword: find_common($cn_domain_keyword; $noncn_domain_keyword),
-          domain_regex: find_common($cn_domain_regex; $noncn_domain_regex),
-          ip_cidr: find_common($cn_ip_cidr; $noncn_ip_cidr)
+          domain: find_common(get_field($cn; "domain"); get_field($noncn; "domain")),
+          domain_suffix: find_common(get_field($cn; "domain_suffix"); get_field($noncn; "domain_suffix")),
+          domain_keyword: find_common(get_field($cn; "domain_keyword"); get_field($noncn; "domain_keyword")),
+          domain_regex: find_common(get_field($cn; "domain_regex"); get_field($noncn; "domain_regex")),
+          ip_cidr: find_common(get_field($cn; "ip_cidr"); get_field($noncn; "ip_cidr"))
         }
       ]
     }
-  ' > "$same_temp"; then
+  ' > "$same_temp" 2>/dev/null; then
     echo " Failed to compare files, skipping"
     rm -f "$same_temp"
     return 0
   fi
-
-  # 调试信息：显示共同部分的大小
+  # DEBUG: 显示共同部分的大小
   local same_size=$(stat -c %s "$same_temp" 2>/dev/null || echo 0)
   echo " Common parts temp file size: $same_size bytes"
-
-  # 更宽松的空文件检查 - 只要有一个字段有内容就不为空
+  # 检查是否为空
   local is_empty=$(jq '
-    .rules[0] | 
-    [.domain, .domain_suffix, .domain_keyword, .domain_regex, .ip_cidr] | 
-    map(if . then length else 0 end) | 
+    .rules[0] |
+    [.domain, .domain_suffix, .domain_keyword, .domain_regex, .ip_cidr] |
+    map(if . then length else 0 end) |
     add == 0
   ' "$same_temp" 2>/dev/null)
-
   if [ "$is_empty" = "true" ]; then
-    echo " No common parts found between $(basename "$cn_file") and $(basename "$noncn_file")"
-    # 调试：显示各字段的长度
+    # DEBUG: 显示各字段的长度
     jq '.rules[0] | with_entries(.value |= length)' "$same_temp" 2>/dev/null || echo " Cannot display field lengths"
+    echo " No common parts found, skipping save to $output_file"
     rm -f "$same_temp"
     return 0
   fi
-
-  # 保存共同部分文件
   mv "$same_temp" "$output_file"
-  local final_size=$(stat -c %s "$output_file" 2>/dev/null || echo 0)
-  echo " Common parts saved to: $output_file ($final_size bytes)"
-
-  # 显示共同部分的统计信息
-  echo " Common parts statistics:"
-  jq '.rules[0] | with_entries(.value |= length)' "$output_file" 2>/dev/null || echo " Cannot display statistics"
-
-  # 从原文件中移除相同部分（使用更安全的方法）
-  echo " Removing common parts from original files..."
-
+  # 从原文件中移除相同部分，添加错误处理
   for file in "$cn_file" "$noncn_file"; do
-    local temp_file="${file}.compare_tmp"
-    if jq --argfile common "$output_file" '
-      def safe_remove($arr; $common_arr):
-        if $arr and $common_arr then 
-          $arr - $common_arr 
-        else 
-          $arr 
-        end;
-      
+    local temp_file="${file}.tmp"
+    if jq --slurpfile common "$output_file" '
+      def remove_common($arr; $common_arr):
+        if $arr and $common_arr then $arr - $common_arr else $arr end;
       if .rules and (.rules | length > 0) then
-        .rules[0].domain = safe_remove(.rules[0].domain; $common.rules[0].domain) |
-        .rules[0].domain_suffix = safe_remove(.rules[0].domain_suffix; $common.rules[0].domain_suffix) |
-        .rules[0].domain_keyword = safe_remove(.rules[0].domain_keyword; $common.rules[0].domain_keyword) |
-        .rules[0].domain_regex = safe_remove(.rules[0].domain_regex; $common.rules[0].domain_regex) |
-        .rules[0].ip_cidr = safe_remove(.rules[0].ip_cidr; $common.rules[0].ip_cidr)
+        .rules[0].domain = remove_common(.rules[0].domain; $common[0].rules[0].domain) |
+        .rules[0].domain_suffix = remove_common(.rules[0].domain_suffix; $common[0].rules[0].domain_suffix) |
+        .rules[0].domain_keyword = remove_common(.rules[0].domain_keyword; $common[0].rules[0].domain_keyword) |
+        .rules[0].domain_regex = remove_common(.rules[0].domain_regex; $common[0].rules[0].domain_regex) |
+        .rules[0].ip_cidr = remove_common(.rules[0].ip_cidr; $common[0].rules[0].ip_cidr)
       else
         .
       end
@@ -467,13 +403,11 @@ compare_cn_pairs() {
       rm -f "$temp_file"
     fi
   done
-
-  echo " Comparison completed for $(basename "$cn_file") and $(basename "$noncn_file")"
+  echo " Comparison completed, common parts saved to: $output_file"
 }
 
-# 优化所有JSON文件并对比CN/!CN分组
+# 执行操作a：优化所有JSON文件并对比CN/!CN分组
 echo "Starting operation A: JSON optimization and CN/!CN comparison..."
-
 # 首先优化所有现有的JSON文件
 for json_file in srs/json/*.json; do
   if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
@@ -481,19 +415,69 @@ for json_file in srs/json/*.json; do
   fi
 done
 
-# 在对比CN和!CN分组之前添加调试
+# 确保 geoip-private.json 存在
+if [ ! -f "srs/json/geoip-private.json" ]; then
+  echo "Creating geoip-private.json..."
+  cat > "srs/json/geoip-private.json" << 'EOF'
+{
+  "version": 1,
+  "rules": [
+    {
+      "ip_cidr": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.0.0.0/24",
+        "192.0.2.0/24",
+        "192.31.196.0/24",
+        "192.52.193.0/24",
+        "192.88.99.0/24",
+        "192.168.0.0/16",
+        "192.175.48.0/24",
+        "198.18.0.0/15",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+        "224.0.0.0/4",
+        "233.252.0.0/24",
+        "240.0.0.0/4",
+        "255.255.255.255/32",
+        "::/128",
+        "::1/128",
+        "::ffff:0:0/96",
+        "64:ff9b::/96",
+        "64:ff9b:1::/48",
+        "100::/64",
+        "2001::/23",
+        "2001:db8::/32",
+        "2002::/16",
+        "2620:4f:8000::/48",
+        "3fff::/20",
+        "5f00::/16",
+        "fc00::/7",
+        "fe80::/10",
+        "ff00::/8"
+      ]
+    }
+  ]
+}
+EOF
+  echo "Created default geoip-private.json"
+fi
+
+# DEBUG: Before CN/!CN comparison
 echo "=== Debug: Before CN/!CN comparison ==="
 for pair in "ai-cn:ai-noncn" "games-cn:games-noncn" "network-cn:network-noncn"; do
   cn_file="srs/json/$(echo $pair | cut -d: -f1).json"
   noncn_file="srs/json/$(echo $pair | cut -d: -f2).json"
-  
   if [ -f "$cn_file" ] && [ -f "$noncn_file" ]; then
     echo "Checking $cn_file and $noncn_file:"
-    # 显示各字段的数量
     for field in domain domain_suffix domain_keyword domain_regex ip_cidr; do
       cn_count=$(jq -r ".rules[0].$field | length" "$cn_file" 2>/dev/null || echo "0")
       noncn_count=$(jq -r ".rules[0].$field | length" "$noncn_file" 2>/dev/null || echo "0")
-      echo "  $field: CN=$cn_count, !CN=$noncn_count"
+      echo " $field: CN=$cn_count, !CN=$noncn_count"
     done
   fi
 done
@@ -507,13 +491,9 @@ compare_cn_pairs "srs/json/network-cn.json" "srs/json/network-noncn.json" "srs/j
 # 优化相同部分的JSON文件
 for same_file in srs/json/same/*.json; do
   if [ -f "$same_file" ]; then
-    echo "Found same file: $same_file"
     optimize_json_file "$same_file"
-  else
-    echo "No same files found or directory doesn't exist"
   fi
 done
-
 echo "Operation A completed!"
 
 # URL定义阶段
@@ -1047,7 +1027,7 @@ hkmotw_urls=(
 
 private_urls=(
   "srs/json/private.json"
-  "https://raw.githubusercontent.com/paka666/rules/main/srs/json/geoip-private.json"
+  "srs/json/geoip-private.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-private.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-private.json"
 )
@@ -1055,50 +1035,41 @@ private_urls=(
 validate_and_fix_json() {
   local file="$1"
   local group_name="$2"
-
   if [ ! -f "$file" ] || [ ! -s "$file" ]; then
-    echo "  File not found or empty: $file"
+    echo " File not found or empty: $file"
     return 1
   fi
-
   if ! jq empty "$file" >/dev/null 2>&1; then
-    echo "  Invalid JSON in $file, attempting to fix..."
-
+    echo " Invalid JSON in $file, attempting to fix..."
     local temp_file="${file}.fixed"
-
     if jq '.' "$file" > "$temp_file" 2>/dev/null; then
       mv "$temp_file" "$file"
-      echo "  Fixed JSON using jq"
+      echo " Fixed JSON using jq"
       return 0
     fi
-
     if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
       mv "$temp_file" "$file"
-      echo "  Added version to rules array"
+      echo " Added version to rules array"
       return 0
     fi
-
     if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
       mv "$temp_file" "$file"
-      echo "  Added version field"
+      echo " Added version field"
       return 0
     fi
-
-    echo "  Could not fix JSON: $file"
+    echo " Could not fix JSON: $file"
     rm -f "$file" "$temp_file"
     return 1
   fi
-
   if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
-    echo "  Adding version field to $file"
+    echo " Adding version field to $file"
     jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
   fi
-
   return 0
 }
 
-# 合并组函数
-merge_group() {
+merge_group()
+{
   local GROUP_NAME=$1
   shift
   local URLS=("$@")
@@ -1106,24 +1077,19 @@ merge_group() {
   local OUTPUT_SRS_FILE="srs/${GROUP_NAME}.srs"
   local TIMESTAMP
   TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-
   rm -f temp/input-"$GROUP_NAME"-*.json
   rm -f "$OUTPUT_SRS_FILE"
-
   echo "Starting merge for group: $GROUP_NAME"
-
   local i=1
   local pids=()
   for url in "${URLS[@]}"; do
     if [ -z "$url" ]; then
       continue
     fi
-
     local current_i=$i
     (
       local file_index=$current_i
       local output_file="temp/input-$GROUP_NAME-$file_index.json"
-
       if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
         if [ -f "$url" ] && [ -s "$url" ]; then
           cp "$url" "$output_file"
@@ -1134,102 +1100,84 @@ merge_group() {
         fi
       else
         echo "Downloading: $url"
-        if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
-          echo "  Downloaded: $url"
+        if wget -q --timeout=60 --tries=3 "$url" -O "$output_file"; then
+          echo " Downloaded: $url"
         else
           echo "Warning: failed to download $url (group $GROUP_NAME)"
           rm -f "$output_file"
         fi
       fi
-
       if [ -f "$output_file" ]; then
         if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
-          echo "  Removing invalid file: $output_file"
+          echo " Removing invalid file: $output_file"
           rm -f "$output_file"
         fi
       fi
     ) &
     pids+=($!)
-
     ((i++))
   done
-
   if [ ${#pids[@]} -gt 0 ]; then
     echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
     wait "${pids[@]}" 2>/dev/null
     echo "Downloads for $GROUP_NAME finished."
   fi
-
   shopt -s nullglob
   local inputs=(temp/input-"$GROUP_NAME"-*.json)
   shopt -u nullglob
-
   if [ "${#inputs[@]}" -eq 0 ]; then
     echo "Error: no input files available for group $GROUP_NAME — skipping merge."
     return 1
   fi
-
   echo "Found ${#inputs[@]} valid input files for group $GROUP_NAME"
-
   local valid_inputs=()
   for input_file in "${inputs[@]}"; do
     if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
       valid_inputs+=("$input_file")
     else
-      echo "  Skipping invalid file: $input_file"
+      echo " Skipping invalid file: $input_file"
     fi
   done
-
   if [ ${#valid_inputs[@]} -eq 0 ]; then
     echo "Error: no valid input files after validation for group $GROUP_NAME"
     return 1
   fi
-
   echo "Using ${#valid_inputs[@]} valid files for merging"
-
   local merged_tmp="temp/merged-$GROUP_NAME.json"
   local config_flags=()
   for input_file in "${valid_inputs[@]}"; do
     config_flags+=("-c" "$input_file")
   done
-
   echo "Merging ${#valid_inputs[@]} files for group $GROUP_NAME..."
   if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
     echo "Error: Failed to merge JSON files for $GROUP_NAME"
     return 1
   fi
-
   # 在编译SRS前进行优化
   echo "Optimizing merged JSON before compilation..."
   optimize_json_file "$merged_tmp"
-
   if ! validate_and_fix_json "$merged_tmp" "$GROUP_NAME"; then
     echo "Error: Merged file is invalid"
     return 1
   fi
-
   local json_backup="srs/json/${GROUP_NAME}.json.bak.${TIMESTAMP}"
   if [ -f "$LOCAL_JSON_FILE" ]; then
     cp -a "$LOCAL_JSON_FILE" "$json_backup"
   fi
-
   mkdir -p "$(dirname "$LOCAL_JSON_FILE")"
   mv -f "$merged_tmp" "$LOCAL_JSON_FILE"
   echo "Saved merged JSON to: $LOCAL_JSON_FILE (backup: $json_backup)"
-
   echo "Compiling SRS file for $GROUP_NAME..."
   if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
     echo "Successfully compiled: $OUTPUT_SRS_FILE"
   else
     echo "Error: Failed to compile SRS for $GROUP_NAME"
-
     if [ -f "$json_backup" ]; then
       cp -a "$json_backup" "$LOCAL_JSON_FILE"
       echo "Restored JSON from backup: $json_backup"
     fi
     return 1
   fi
-
   rm -f temp/input-"$GROUP_NAME"-*.json
   echo "Completed group $GROUP_NAME -> JSON: $LOCAL_JSON_FILE, SRS: $OUTPUT_SRS_FILE"
 }
@@ -1252,7 +1200,7 @@ cleanup_old_backups() {
     echo "Cleaning up old backup files..."
     find srs/json -name "*.bak.*" -type f | sort -r | tail -n +4 | xargs rm -f 2>/dev/null || true
     # 清理临时文件
-    rm -f temp/ip_cidr_*.json
+    rm -f temp/ip_cidr_*.json temp/optimize_*.jq temp/*.temp temp/*.fixed temp/*.tmp
 }
 cleanup_old_backups
 
@@ -1263,16 +1211,15 @@ print_size_stats() {
     if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
       local size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
       local name=$(basename "$json_file")
-      printf "  %-40s: %10d bytes\n" "$name" "$size"
+      printf " %-40s: %10d bytes\n" "$name" "$size"
     fi
   done
-
   echo "=== SRS File Statistics ==="
   for srs_file in srs/*.srs; do
     if [ -f "$srs_file" ]; then
       local size=$(stat -c %s "$srs_file" 2>/dev/null || echo 0)
       local name=$(basename "$srs_file")
-      printf "  %-40s: %10d bytes\n" "$name" "$size"
+      printf " %-40s: %10d bytes\n" "$name" "$size"
     fi
   done
 }
