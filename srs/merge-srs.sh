@@ -19,7 +19,7 @@ mkdir -p temp srs srs/json srs/json/same
 
 # ========== 1. 依赖检查 ==========
 check_dependencies() {
-  local deps=("jq" "wget" "sing-box" "python3")
+  local deps=("jq" "curl" "sing-box" "python3")
   local missing=()
 
   for dep in "${deps[@]}"; do
@@ -253,7 +253,7 @@ preprocess_ruleset() {
   # 下载，新增重试循环（最多3次）
   local retry=0
   while [ $retry -lt 3 ]; do
-    if wget -q --fail --timeout=180 --tries=1 "$base_url" -O "$base_temp"; then
+    if curl -s --fail --connect-timeout 180 --max-time 180 -o "$base_temp" "$base_url"; then
       break
     fi
     echo "  下载 $base_url 失败，重试 $((retry+1))/3"
@@ -267,7 +267,7 @@ preprocess_ruleset() {
 
   retry=0
   while [ $retry -lt 3 ]; do
-    if wget -q --fail --timeout=180 --tries=1 "$exclude_url" -O "$exclude_temp"; then
+    if curl -s --fail --connect-timeout 180 --max-time 180 -o "$exclude_temp" "$exclude_url"; then
       break
     fi
     echo "  下载 $exclude_url 失败，重试 $((retry+1))/3"
@@ -415,7 +415,7 @@ merge_group() {
       else
         local retry=0
         while [ $retry -lt 3 ]; do
-          if wget -q --fail --timeout=60 --tries=1 "$url" -O "$output_file" 2>/dev/null; then
+          if curl -s --fail --connect-timeout 60 --max-time 60 -o "$output_file" "$url"; then
             echo "  下载: $url"
             break
           fi
@@ -439,7 +439,7 @@ merge_group() {
   [ ${#pids[@]} -gt 0 ] && wait "${pids[@]}" 2>/dev/null
   echo "  下载/复制 完成"
 
-  # --- 步骤 2: 收集有效文件 ---
+  # --- 步骤 2: 收集输入文件 ---
   shopt -s nullglob
   local inputs=(temp/input-"$GROUP_NAME"-*.json)
   shopt -u nullglob
@@ -1264,11 +1264,3 @@ echo "=== 所有任务完成 ==="
 echo "JSON文件位于: srs/json/"
 echo "SRS文件位于: srs/"
 echo "共同规则文件位于: srs/json/same/"
-
-# --- Git 提交 (可选) ---
-# echo "正在提交更改..."
-# git config --global user.name "GitHub Actions"
-# git config --global user.email "actions@github.com"
-# git add srs/ srs/json/
-# git commit -m "每日规则更新: $(date +%Y-%m-%d)" || echo "没有更改可提交"
-# git push || echo "推送失败，请检查git配置"
