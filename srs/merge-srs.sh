@@ -332,7 +332,7 @@ except Exception as e:
   echo " Optimization completed (after size: $after_size bytes, reduced: $reduction bytes)"
 }
 
-# 对比CN和!CN分组，找出相同部分，如果same为空不保存
+# 修复的对比CN和!CN分组函数
 compare_cn_pairs() {
   local cn_file="$1"
   local noncn_file="$2"
@@ -351,62 +351,124 @@ compare_cn_pairs() {
     return 0
   fi
 
+  # 调试信息：显示文件大小
+  local cn_size=$(stat -c %s "$cn_file" 2>/dev/null || echo 0)
+  local noncn_size=$(stat -c %s "$noncn_file" 2>/dev/null || echo 0)
+  echo " File sizes - CN: $cn_size bytes, !CN: $noncn_size bytes"
+
   # 找出相同部分
   local same_temp="${output_file}.temp"
+
+  # 使用更健壮的对比逻辑
   if ! jq -n --argfile cn "$cn_file" --argfile noncn "$noncn_file" '
-    def find_common($a; $b):
-      if $a and $b then
-        $a | map(select(. as $item | $b | index($item)))
-      else
-        []
+    # 安全获取字段，处理可能不存在的字段
+    def safe_get_field($file; $field):
+      if $file.rules and ($file.rules | length > 0) and $file.rules[0][$field] then 
+        $file.rules[0][$field] 
+      else 
+        [] 
       end;
 
-    def get_field($file; $field):
-      if $file.rules[0][$field] then $file.rules[0][$field] else [] end;
+    # 查找共同元素
+    def find_common($a; $b):
+      if ($a | length == 0) or ($b | length == 0) then
+        []
+      else
+        $a | [.[] | select(IN($b[]))]
+      end;
 
+    # 获取两个文件的所有字段
+    ($cn | safe_get_field(.; "domain")) as $cn_domain |
+    ($noncn | safe_get_field(.; "domain")) as $noncn_domain |
+    ($cn | safe_get_field(.; "domain_suffix")) as $cn_domain_suffix |
+    ($noncn | safe_get_field(.; "domain_suffix")) as $noncn_domain_suffix |
+    ($cn | safe_get_field(.; "domain_keyword")) as $cn_domain_keyword |
+    ($noncn | safe_get_field(.; "domain_keyword")) as $noncn_domain_keyword |
+    ($cn | safe_get_field(.; "domain_regex")) as $cn_domain_regex |
+    ($noncn | safe_get_field(.; "domain_regex")) as $noncn_domain_regex |
+    ($cn | safe_get_field(.; "ip_cidr")) as $cn_ip_cidr |
+    ($noncn | safe_get_field(.; "ip_cidr")) as $noncn_ip_cidr |
+
+    # 计算共同部分
     {
       version: 1,
       rules: [
         {
-          domain: find_common(get_field($cn; "domain"); get_field($noncn; "domain")),
-          domain_suffix: find_common(get_field($cn; "domain_suffix"); get_field($noncn; "domain_suffix")),
-          domain_keyword: find_common(get_field($cn; "domain_keyword"); get_field($noncn; "domain_keyword")),
-          domain_regex: find_common(get_field($cn; "domain_regex"); get_field($noncn; "domain_regex")),
-          ip_cidr: find_common(get_field($cn; "ip_cidr"); get_field($noncn; "ip_cidr"))
+          domain: find_common($cn_domain; $noncn_domain),
+          domain_suffix: find_common($cn_domain_suffix; $noncn_domain_suffix),
+          domain_keyword: find_common($cn_domain_keyword; $noncn_domain_keyword),
+          domain_regex: find_common($cn_domain_regex; $noncn_domain_regex),
+          ip_cidr: find_common($cn_ip_cidr; $noncn_ip_cidr)
         }
       ]
     }
-  ' > "$same_temp" 2>/dev/null; then
+  ' > "$same_temp"; then
     echo " Failed to compare files, skipping"
     rm -f "$same_temp"
     return 0
   fi
 
-  # 检查same是否为空
-  local is_empty=$(jq '[.rules[0][] | length] | add == 0' "$same_temp" 2>/dev/null || echo "true")
+  # 调试信息：显示共同部分的大小
+  local same_size=$(stat -c %s "$same_temp" 2>/dev/null || echo 0)
+  echo " Common parts temp file size: $same_size bytes"
+
+  # 更宽松的空文件检查 - 只要有一个字段有内容就不为空
+  local is_empty=$(jq '
+    .rules[0] | 
+    [.domain, .domain_suffix, .domain_keyword, .domain_regex, .ip_cidr] | 
+    map(if . then length else 0 end) | 
+    add == 0
+  ' "$same_temp" 2>/dev/null)
+
   if [ "$is_empty" = "true" ]; then
-    echo " No common parts found, skipping save to $output_file"
+    echo " No common parts found between $(basename "$cn_file") and $(basename "$noncn_file")"
+    # 调试：显示各字段的长度
+    jq '.rules[0] | with_entries(.value |= length)' "$same_temp" 2>/dev/null || echo " Cannot display field lengths"
     rm -f "$same_temp"
     return 0
   fi
 
+  # 保存共同部分文件
   mv "$same_temp" "$output_file"
+  local final_size=$(stat -c %s "$output_file" 2>/dev/null || echo 0)
+  echo " Common parts saved to: $output_file ($final_size bytes)"
+
+  # 显示共同部分的统计信息
+  echo " Common parts statistics:"
+  jq '.rules[0] | with_entries(.value |= length)' "$output_file" 2>/dev/null || echo " Cannot display statistics"
 
   # 从原文件中移除相同部分（使用更安全的方法）
+  echo " Removing common parts from original files..."
+
   for file in "$cn_file" "$noncn_file"; do
-    jq --argfile common "$output_file" '
-      def remove_common($arr; $common_arr):
-        if $arr and $common_arr then $arr - $common_arr else $arr end;
+    local temp_file="${file}.compare_tmp"
+    if jq --argfile common "$output_file" '
+      def safe_remove($arr; $common_arr):
+        if $arr and $common_arr then 
+          $arr - $common_arr 
+        else 
+          $arr 
+        end;
       
-      .rules[0].domain = remove_common(.rules[0].domain; $common.rules[0].domain) |
-      .rules[0].domain_suffix = remove_common(.rules[0].domain_suffix; $common.rules[0].domain_suffix) |
-      .rules[0].domain_keyword = remove_common(.rules[0].domain_keyword; $common.rules[0].domain_keyword) |
-      .rules[0].domain_regex = remove_common(.rules[0].domain_regex; $common.rules[0].domain_regex) |
-      .rules[0].ip_cidr = remove_common(.rules[0].ip_cidr; $common.rules[0].ip_cidr)
-    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+      if .rules and (.rules | length > 0) then
+        .rules[0].domain = safe_remove(.rules[0].domain; $common.rules[0].domain) |
+        .rules[0].domain_suffix = safe_remove(.rules[0].domain_suffix; $common.rules[0].domain_suffix) |
+        .rules[0].domain_keyword = safe_remove(.rules[0].domain_keyword; $common.rules[0].domain_keyword) |
+        .rules[0].domain_regex = safe_remove(.rules[0].domain_regex; $common.rules[0].domain_regex) |
+        .rules[0].ip_cidr = safe_remove(.rules[0].ip_cidr; $common.rules[0].ip_cidr)
+      else
+        .
+      end
+    ' "$file" > "$temp_file"; then
+      mv "$temp_file" "$file"
+      echo "  Updated: $(basename "$file")"
+    else
+      echo "  Failed to update: $(basename "$file")"
+      rm -f "$temp_file"
+    fi
   done
 
-  echo " Comparison completed, common parts saved to: $output_file"
+  echo " Comparison completed for $(basename "$cn_file") and $(basename "$noncn_file")"
 }
 
 # 优化所有JSON文件并对比CN/!CN分组
@@ -419,6 +481,24 @@ for json_file in srs/json/*.json; do
   fi
 done
 
+# 在对比CN和!CN分组之前添加调试
+echo "=== Debug: Before CN/!CN comparison ==="
+for pair in "ai-cn:ai-noncn" "games-cn:games-noncn" "network-cn:network-noncn"; do
+  cn_file="srs/json/$(echo $pair | cut -d: -f1).json"
+  noncn_file="srs/json/$(echo $pair | cut -d: -f2).json"
+  
+  if [ -f "$cn_file" ] && [ -f "$noncn_file" ]; then
+    echo "Checking $cn_file and $noncn_file:"
+    # 显示各字段的数量
+    for field in domain domain_suffix domain_keyword domain_regex ip_cidr; do
+      cn_count=$(jq -r ".rules[0].$field | length" "$cn_file" 2>/dev/null || echo "0")
+      noncn_count=$(jq -r ".rules[0].$field | length" "$noncn_file" 2>/dev/null || echo "0")
+      echo "  $field: CN=$cn_count, !CN=$noncn_count"
+    done
+  fi
+done
+echo "=== End Debug ==="
+
 # 对比CN和!CN分组
 compare_cn_pairs "srs/json/ai-cn.json" "srs/json/ai-noncn.json" "srs/json/same/ai-same.json"
 compare_cn_pairs "srs/json/games-cn.json" "srs/json/games-noncn.json" "srs/json/same/games-same.json"
@@ -427,7 +507,10 @@ compare_cn_pairs "srs/json/network-cn.json" "srs/json/network-noncn.json" "srs/j
 # 优化相同部分的JSON文件
 for same_file in srs/json/same/*.json; do
   if [ -f "$same_file" ]; then
+    echo "Found same file: $same_file"
     optimize_json_file "$same_file"
+  else
+    echo "No same files found or directory doesn't exist"
   fi
 done
 
