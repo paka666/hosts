@@ -21,9 +21,7 @@ jobs:
 
       - name: Mkdir
         run: |
-          mkdir -p temp
-          mkdir -p adh/tmp
-          mkdir -p adh/backup
+          mkdir -p temp adh/tmp adh/backup
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

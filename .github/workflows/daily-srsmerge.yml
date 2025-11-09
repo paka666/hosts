@@ -23,16 +23,29 @@ jobs:
 
       - name: Mkdir
         run: |
-          mkdir -p temp srs srs/json
+          mkdir -p temp srs srs/json srs/json/same
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: '**/requirements.txt'
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+          sudo apt-get update -y
+          sudo apt-get install -y jq  libre2-dev
 
       - name: Install sing-box
         run: |
           curl -fsSL https://sing-box.app/install.sh | sh
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pybind11
+          pip install -r py/requirements.txt
 
       - name: Run merge script
         run: bash srs/merge-srs.sh
@@ -41,5 +54,5 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Daily srs merge"
-          file_pattern: "srs/*.srs srs/json/*.json"
+          file_pattern: "srs/*.srs srs/json/*.json srs/json/same/*.json"
           token: ${{ secrets.GITHUB_TOKEN }}
