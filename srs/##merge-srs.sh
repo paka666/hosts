@@ -196,38 +196,30 @@ optimize_json_file() {
     exit 1
   fi
 
-  # 修复的jq处理逻辑 - 处理字符串和数组的混合情况
+  # 第一步：分别处理每个字段，避免循环依赖
   jq '
-    # 确保输入是数组，处理字符串和数组混合的情况
-    def ensure_array:
-      if . == null then []
-      elif type == "string" then [.]
-      elif type == "array" then 
-        map(if type == "string" then . else tostring end)
-      else [tostring] end;
-
-    # 处理domain：确保是数组，去掉首位的点，去重排序
+    # 处理domain：去掉首位的点，去重排序
     def process_domain: 
-      ensure_array | map(if startswith(".") then .[1:] else . end) | unique | sort;
+      if . then map(if startswith(".") then .[1:] else . end) | unique | sort else [] end;
 
-    # 处理domain_suffix：确保是数组，确保有首位的点，去重排序  
+    # 处理domain_suffix：确保有首位的点，去重排序  
     def process_domain_suffix:
-      ensure_array | map(if startswith(".") then . else "." + . end) | unique | sort;
+      if . then map(if startswith(".") then . else "." + . end) | unique | sort else [] end;
 
-    # 处理其他字段：确保是数组，去重排序
+    # 处理其他字段：去重排序
     def process_other:
-      ensure_array | unique | sort;
+      if . then unique | sort else [] end;
 
     if .rules then
       .rules |= map(
         . as $rule |
         {
-          # 单独处理每个字段，使用空数组作为默认值
-          domain: (($rule.domain // []) | process_domain),
-          domain_suffix: (($rule.domain_suffix // []) | process_domain_suffix),
-          domain_keyword: (($rule.domain_keyword // []) | process_other),
-          domain_regex: (($rule.domain_regex // []) | process_other),
-          ip_cidr: (($rule.ip_cidr // []) | process_other)
+          # 单独处理每个字段
+          domain: ($rule.domain | process_domain),
+          domain_suffix: ($rule.domain_suffix | process_domain_suffix),
+          domain_keyword: ($rule.domain_keyword | process_other),
+          domain_regex: ($rule.domain_regex | process_other),
+          ip_cidr: ($rule.ip_cidr | process_other)
         }
       )
     else
@@ -237,25 +229,18 @@ optimize_json_file() {
 
   # 第二步：在domain和domain_suffix之间建立对应关系
   jq '
-    def ensure_array:
-      if . == null then []
-      elif type == "string" then [.]
-      elif type == "array" then 
-        map(if type == "string" then . else tostring end)
-      else [tostring] end;
-
     if .rules then
       .rules |= map(
         . as $rule |
         {
           # 从domain生成domain_suffix
-          domain_suffix: ((($rule.domain_suffix // []) | ensure_array) + (($rule.domain // []) | ensure_array | map("." + .)) | unique | sort),
+          domain_suffix: (($rule.domain_suffix // []) + ($rule.domain | map("." + .)) | unique | sort),
           # 从domain_suffix生成domain  
-          domain: ((($rule.domain // []) | ensure_array) + (($rule.domain_suffix // []) | ensure_array | map(if startswith(".") then .[1:] else . end)) | unique | sort),
+          domain: (($rule.domain // []) + ($rule.domain_suffix | map(if startswith(".") then .[1:] else . end)) | unique | sort),
           # 其他字段保持不变
-          domain_keyword: ($rule.domain_keyword // []) | ensure_array,
-          domain_regex: ($rule.domain_regex // []) | ensure_array,
-          ip_cidr: ($rule.ip_cidr // []) | ensure_array
+          domain_keyword: ($rule.domain_keyword // []),
+          domain_regex: ($rule.domain_regex // []),
+          ip_cidr: ($rule.ip_cidr // [])
         }
       )
     else
@@ -263,68 +248,30 @@ optimize_json_file() {
     end
   ' "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
 
-  # 第三步：合并ip_cidr网段 - 使用文件传递数据避免参数过长
+  # 第三步：合并ip_cidr网段
   local ip_cidr_json=$(jq '.rules[0].ip_cidr // []' "$json_file")
-  if [ "$ip_cidr_json" != "[]" ] && [ "$ip_cidr_json" != "null" ]; then
-    # 创建临时文件来传递数据，避免参数过长
-    local ip_temp_file="temp/ip_cidr_$$.json"
-    echo "$ip_cidr_json" > "$ip_temp_file"
-
+  if [ "$ip_cidr_json" != "[]" ]; then
     local merged_ip_cidr
     merged_ip_cidr=$(python3 -c "
 import ipaddress
 import json
 import sys
 
-def merge_ip_cidrs(ip_list):
-    try:
-        if not ip_list:
-            return []
-
-        # 分离IPv4和IPv6
-        ipv4_networks = []
-        ipv6_networks = []
-
-        for ip_cidr in ip_list:
-            try:
-                network = ipaddress.ip_network(ip_cidr, strict=False)
-                if network.version == 4:
-                    ipv4_networks.append(network)
-                else:
-                    ipv6_networks.append(network)
-            except ValueError as e:
-                # 忽略无效的CIDR
-                continue
-
-        # 分别合并IPv4和IPv6
-        merged_ipv4 = list(ipaddress.collapse_addresses(ipv4_networks))
-        merged_ipv6 = list(ipaddress.collapse_addresses(ipv6_networks))
-
-        # 合并结果
-        result = [str(net) for net in merged_ipv4 + merged_ipv6]
-        return result
-    except Exception as e:
-        print(f'Error merging IP CIDRs: {e}', file=sys.stderr)
-        return ip_list  # 出错时返回原列表
-
-# 从文件读取数据
 try:
-    with open(sys.argv[1], 'r') as f:
-        ip_cidrs = json.load(f)
-    merged = merge_ip_cidrs(ip_cidrs)
-    print(json.dumps(merged))
+    cidrs = json.loads(sys.argv[1])
+    if not cidrs:
+        print('[]')
+    else:
+        networks = sorted([ipaddress.ip_network(c, strict=False) for c in cidrs])
+        merged = ipaddress.collapse_addresses(networks)
+        print(json.dumps([str(net) for net in merged]))
 except Exception as e:
-    print('[]')
-    print(f'File processing error: {e}', file=sys.stderr)
-" "$ip_temp_file")
-
-    # 清理临时文件
-    rm -f "$ip_temp_file"
+    print(json.dumps([]))
+    sys.stderr.write('IP CIDR merge error: ' + str(e) + '\n')
+" "$ip_cidr_json")
 
     # 更新回JSON
-    if [ "$merged_ip_cidr" != "[]" ]; then
-      jq ".rules[0].ip_cidr = $merged_ip_cidr" "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
-    fi
+    jq ".rules[0].ip_cidr = $merged_ip_cidr" "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
   fi
 
   local after_size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
@@ -414,7 +361,7 @@ echo "Starting operation A: JSON optimization and CN/!CN comparison..."
 
 # 首先优化所有现有的JSON文件
 for json_file in srs/json/*.json; do
-  if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
+  if [ -f "$json_file" ]; then
     optimize_json_file "$json_file"
   fi
 done
@@ -974,48 +921,48 @@ validate_and_fix_json() {
   local group_name="$2"
 
   if [ ! -f "$file" ] || [ ! -s "$file" ]; then
-    echo "  File not found or empty: $file"
-    return 1
+  echo "  File not found or empty: $file"
+  return 1
   fi
 
   if ! jq empty "$file" >/dev/null 2>&1; then
-    echo "  Invalid JSON in $file, attempting to fix..."
+  echo "  Invalid JSON in $file, attempting to fix..."
 
-    local temp_file="${file}.fixed"
+  local temp_file="${file}.fixed"
 
-    if jq '.' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Fixed JSON using jq"
-      return 0
-    fi
+  if jq '.' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Fixed JSON using jq"
+    return 0
+  fi
 
-    if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Added version to rules array"
-      return 0
-    fi
+  if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Added version to rules array"
+    return 0
+  fi
 
-    if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo "  Added version field"
-      return 0
-    fi
+  if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file"
+    echo "  Added version field"
+    return 0
+  fi
 
-    echo "  Could not fix JSON: $file"
-    rm -f "$file" "$temp_file"
-    return 1
+  echo "  Could not fix JSON: $file"
+  rm -f "$file" "$temp_file"
+  return 1
   fi
 
   if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
-    echo "  Adding version field to $file"
-    jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  echo "  Adding version field to $file"
+  jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
   fi
 
   return 0
 }
 
-# 合并组函数
-merge_group() {
+merge_group()
+{
   local GROUP_NAME=$1
   shift
   local URLS=("$@")
@@ -1032,49 +979,51 @@ merge_group() {
   local i=1
   local pids=()
   for url in "${URLS[@]}"; do
-    if [ -z "$url" ]; then
-      continue
+  if [ -z "$url" ]; then
+    continue
+  fi
+
+  local current_i=$i
+  (
+    local file_index=$current_i
+    local output_file="temp/input-$GROUP_NAME-$file_index.json"
+
+    if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
+
+    if [ -f "$url" ] && [ -s "$url" ]; then
+      cp "$url" "$output_file"
+      echo "Copied local file: $url"
+    else
+      echo "Warning: local file $url not found or empty"
+      rm -f "$output_file"
+    fi
+    else
+
+    echo "Downloading: $url"
+    if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
+      echo "  Downloaded: $url"
+    else
+      echo "Warning: failed to download $url (group $GROUP_NAME)"
+      rm -f "$output_file"
+    fi
     fi
 
-    local current_i=$i
-    (
-      local file_index=$current_i
-      local output_file="temp/input-$GROUP_NAME-$file_index.json"
+    if [ -f "$output_file" ]; then
+    if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
+      echo "  Removing invalid file: $output_file"
+      rm -f "$output_file"
+    fi
+    fi
+  ) &
+  pids+=($!)
 
-      if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
-        if [ -f "$url" ] && [ -s "$url" ]; then
-          cp "$url" "$output_file"
-          echo "Copied local file: $url"
-        else
-          echo "Warning: local file $url not found or empty"
-          rm -f "$output_file"
-        fi
-      else
-        echo "Downloading: $url"
-        if wget -q --timeout=180 --tries=3 "$url" -O "$output_file"; then
-          echo "  Downloaded: $url"
-        else
-          echo "Warning: failed to download $url (group $GROUP_NAME)"
-          rm -f "$output_file"
-        fi
-      fi
-
-      if [ -f "$output_file" ]; then
-        if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
-          echo "  Removing invalid file: $output_file"
-          rm -f "$output_file"
-        fi
-      fi
-    ) &
-    pids+=($!)
-
-    ((i++))
+  ((i++))
   done
 
   if [ ${#pids[@]} -gt 0 ]; then
-    echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
-    wait "${pids[@]}" 2>/dev/null
-    echo "Downloads for $GROUP_NAME finished."
+  echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
+  wait "${pids[@]}" 2>/dev/null
+  echo "Downloads for $GROUP_NAME finished."
   fi
 
   shopt -s nullglob
@@ -1082,24 +1031,24 @@ merge_group() {
   shopt -u nullglob
 
   if [ "${#inputs[@]}" -eq 0 ]; then
-    echo "Error: no input files available for group $GROUP_NAME — skipping merge."
-    return 1
+  echo "Error: no input files available for group $GROUP_NAME — skipping merge."
+  return 1
   fi
 
   echo "Found ${#inputs[@]} valid input files for group $GROUP_NAME"
 
   local valid_inputs=()
   for input_file in "${inputs[@]}"; do
-    if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
-      valid_inputs+=("$input_file")
-    else
-      echo "  Skipping invalid file: $input_file"
-    fi
+  if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
+    valid_inputs+=("$input_file")
+  else
+    echo "  Skipping invalid file: $input_file"
+  fi
   done
 
   if [ ${#valid_inputs[@]} -eq 0 ]; then
-    echo "Error: no valid input files after validation for group $GROUP_NAME"
-    return 1
+  echo "Error: no valid input files after validation for group $GROUP_NAME"
+  return 1
   fi
 
   echo "Using ${#valid_inputs[@]} valid files for merging"
@@ -1107,13 +1056,13 @@ merge_group() {
   local merged_tmp="temp/merged-$GROUP_NAME.json"
   local config_flags=()
   for input_file in "${valid_inputs[@]}"; do
-    config_flags+=("-c" "$input_file")
+  config_flags+=("-c" "$input_file")
   done
 
   echo "Merging ${#valid_inputs[@]} files for group $GROUP_NAME..."
   if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
-    echo "Error: Failed to merge JSON files for $GROUP_NAME"
-    return 1
+  echo "Error: Failed to merge JSON files for $GROUP_NAME"
+  return 1
   fi
 
   # 在编译SRS前进行优化
@@ -1121,13 +1070,13 @@ merge_group() {
   optimize_json_file "$merged_tmp"
 
   if ! validate_and_fix_json "$merged_tmp" "$GROUP_NAME"; then
-    echo "Error: Merged file is invalid"
-    return 1
+  echo "Error: Merged file is invalid"
+  return 1
   fi
 
   local json_backup="srs/json/${GROUP_NAME}.json.bak.${TIMESTAMP}"
   if [ -f "$LOCAL_JSON_FILE" ]; then
-    cp -a "$LOCAL_JSON_FILE" "$json_backup"
+  cp -a "$LOCAL_JSON_FILE" "$json_backup"
   fi
 
   mkdir -p "$(dirname "$LOCAL_JSON_FILE")"
@@ -1136,15 +1085,15 @@ merge_group() {
 
   echo "Compiling SRS file for $GROUP_NAME..."
   if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
-    echo "Successfully compiled: $OUTPUT_SRS_FILE"
+  echo "Successfully compiled: $OUTPUT_SRS_FILE"
   else
-    echo "Error: Failed to compile SRS for $GROUP_NAME"
+  echo "Error: Failed to compile SRS for $GROUP_NAME"
 
-    if [ -f "$json_backup" ]; then
-      cp -a "$json_backup" "$LOCAL_JSON_FILE"
-      echo "Restored JSON from backup: $json_backup"
-    fi
-    return 1
+  if [ -f "$json_backup" ]; then
+    cp -a "$json_backup" "$LOCAL_JSON_FILE"
+    echo "Restored JSON from backup: $json_backup"
+  fi
+  return 1
   fi
 
   rm -f temp/input-"$GROUP_NAME"-*.json
@@ -1165,22 +1114,24 @@ merge_group "hkmotw" "${hkmotw_urls[@]}"
 merge_group "private" "${private_urls[@]}"
 
 # 清理旧的备份文件（保留最近3个）
-cleanup_old_backups() {
+cleanup_old_backups()
+{
     echo "Cleaning up old backup files..."
     find srs/json -name "*.bak.*" -type f | sort -r | tail -n +4 | xargs rm -f 2>/dev/null || true
-    # 清理临时文件
-    rm -f temp/ip_cidr_*.json
 }
 cleanup_old_backups
 
 # 添加文件大小统计函数
 print_size_stats() {
   echo "=== File Size Statistics ==="
+  local total_before=0
+  local total_after=0
+
   for json_file in srs/json/*.json; do
-    if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
+    if [ -f "$json_file" ]; then
       local size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
       local name=$(basename "$json_file")
-      printf "  %-40s: %10d bytes\n" "$name" "$size"
+      echo "  $name: $size bytes"
     fi
   done
 
@@ -1189,7 +1140,7 @@ print_size_stats() {
     if [ -f "$srs_file" ]; then
       local size=$(stat -c %s "$srs_file" 2>/dev/null || echo 0)
       local name=$(basename "$srs_file")
-      printf "  %-40s: %10d bytes\n" "$name" "$size"
+      echo "  $name: $size bytes"
     fi
   done
 }
