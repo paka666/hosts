@@ -460,6 +460,11 @@ merge_group() {
     # 1. 将所有文件的 .rules 数组拍平为一个数组
     [ map(.rules // []) | flatten ] |
 
+    # 新增: 将非对象项转换为对象（处理classical格式：字符串或数组转为 {domain: [...]} ）
+    map(if type == "object" then .
+        elif type == "array" then {domain: .}
+        else {domain: [.]} end) |
+
     # 新增: 过滤空规则对象
     map(select(. | keys | length > 0)) |
 
@@ -700,7 +705,6 @@ for same_file in srs/json/same/*.json; do
 done
 
 echo "--- 步骤 A 完成 ---"
-
 
 # --- 步骤 B: 定义URL并执行主合并 ---
 echo "--- 步骤 B: 定义URL并执行主合并 ---"
