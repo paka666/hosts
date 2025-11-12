@@ -1,95 +1,522 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mkdir -p temp srs srs/json srs/json/same
 
-# 检查必要依赖
-check_dependencies() {
-  local deps=("jq" "wget" "sing-box" "python3")
-  local missing=()
-  for dep in "${deps[@]}"; do
-    if ! command -v "$dep" >/dev/null 2>&1; then
-      missing+=("$dep")
-    fi
-  done
-  if [ ${#missing[@]} -gt 0 ]; then
-    echo "Error: Missing dependencies: ${missing[*]}"
-    echo "Please install them before running this script."
-    exit 1
-  fi
-  # 检查Python ipaddress模块
-  if ! python3 -c "import ipaddress" >/dev/null 2>&1; then
-    echo "Error: Python ipaddress module is required"
-    exit 1
-  fi
-}
+# --- 脚本配置 ---
+# 定义新的目录结构
+SOURCE_DIR="srs/json/source"
+SUBSET_DIR="srs/json/subset"
+COMMON_DIR="srs/json/common"
+SRS_DIR="srs"
+TEMP_DIR="temp"
+PYTHON_SCRIPT_PATH="${TEMP_DIR}/process_rules.py"
 
-echo "Checking dependencies..."
-check_dependencies
+# --- 步骤 0: 创建目录和 Python 脚本 ---
+echo "--- 步骤 0: 正在设置环境 ---"
+mkdir -p "$TEMP_DIR" "$SRS_DIR" "$SOURCE_DIR" "$SUBSET_DIR" "$COMMON_DIR"
 
-# 预处理阶段
+# Heretic Doc: 将 Python 脚本写入临时文件
+# 这确保了脚本的单一文件分发
+cat << 'EOF' > "$PYTHON_SCRIPT_PATH"
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import json
+import ipaddress
+import sys
+import re
+import argparse
+from pathlib import Path
+from typing import List, Set, Dict, Any, Tuple
+
+# -----------------------------------------------------------------------------
+# 路径配置 (从 Bash 脚本的定义派生)
+# -----------------------------------------------------------------------------
+BASE_DIR = Path.cwd()
+SOURCE_DIR = BASE_DIR / "srs/json/source"
+SUBSET_DIR = BASE_DIR / "srs/json/subset"
+COMMON_DIR = BASE_DIR / "srs/json/common"
+
+# -----------------------------------------------------------------------------
+# 核心功能：IP CIDR 合并
+# -----------------------------------------------------------------------------
+def merge_cidrs(cidrs_list: Set[str]) -> List[str]:
+    """
+    合并重叠和相邻的 IP CIDR。
+    使用 ipaddress.collapse_addresses 来高效处理 IPv4 和 IPv6。
+    将单个 IP 转换为 /32 (v4) 或 /128 (v6)。
+    """
+    v4_nets = []
+    v6_nets = []
+    
+    for cidr_str in cidrs_list:
+        if not cidr_str:
+            continue
+        try:
+            # strict=False 允许 "1.1.1.1" 这种单个 IP
+            # ip_network 会自动将其转换为 "1.1.1.1/32"
+            net = ipaddress.ip_network(cidr_str.strip(), strict=False)
+            if net.version == 4:
+                v4_nets.append(net)
+            else:
+                v6_nets.append(net)
+        except ValueError as e:
+            print(f"    [警告] 忽略无效的 IP/CIDR: '{cidr_str}' ({e})", file=sys.stderr)
+
+    # 分别合并 v4 和 v6
+    merged_v4 = list(ipaddress.collapse_addresses(v4_nets))
+    merged_v6 = list(ipaddress.collapse_addresses(v6_nets))
+
+    # 排序以确保一致的输出
+    merged_v4.sort(key=lambda n: (n.network_address, n.prefixlen))
+    merged_v6.sort(key=lambda n: (n.network_address, n.prefixlen))
+
+    # 转换回字符串列表
+    return [str(n) for n in merged_v4] + [str(n) for n in merged_v6]
+
+# -----------------------------------------------------------------------------
+# 核心功能：Domain/Suffix 规范化
+# -----------------------------------------------------------------------------
+def normalize_domains_and_suffixes(
+    all_domains: Set[str], 
+    all_domain_suffixes: Set[str]
+) -> Tuple[List[str], List[str]]:
+    """
+    执行 Domain/Suffix 的 www 移除和交叉规范化。
+    """
+    
+    def strip_www(domain_set: Set[str]) -> Set[str]:
+        """移除 www. 和 .www. 前缀"""
+        normalized_set = set()
+        for d in domain_set:
+            d_stripped = d.strip()
+            if not d_stripped:
+                continue
+            
+            # 移除 ".www." 或 "www." 前缀
+            # 1. ".www.foo.com" -> "foo.com"
+            # 2. "www.foo.com" -> "foo.com"
+            # 3. ".foo.com" -> ".foo.com" (re.sub 不匹配)
+            # 4. "foo.com" -> "foo.com" (re.sub 不匹配)
+            d_normalized = re.sub(r'^(?:\.www\.|www\.)', '', d_stripped)
+            
+            if d_normalized:
+                normalized_set.add(d_normalized)
+        return normalized_set
+
+    # 1. 移除 'www'
+    # 第一次去重：在 www 规范化后
+    domains_no_www = strip_www(all_domains)
+    suffixes_no_www = strip_www(all_domain_suffixes)
+
+    final_domains = set()
+    final_domain_suffixes = set()
+
+    # 2. 交叉规范化
+    
+    # 将 domain_suffix -> domain
+    for s in suffixes_no_www:
+        clean_s = s.lstrip('.')
+        if clean_s:
+            final_domains.add(clean_s)
+            final_domain_suffixes.add(f".{clean_s}") # 确保自身格式正确
+
+    # 将 domain -> domain_suffix
+    for d in domains_no_www:
+        clean_d = d.lstrip('.')
+        if clean_d:
+            final_domains.add(clean_d) # 确保自身格式正确
+            final_domain_suffixes.add(f".{clean_d}")
+
+    # 3. 排序和去重（通过 set 已完成去重）
+    return sorted(list(final_domains)), sorted(list(final_domain_suffixes))
+
+# -----------------------------------------------------------------------------
+# 核心功能：“操作 A” - JSON 规范化
+# -----------------------------------------------------------------------------
+def process_json_file(file_path: Path):
+    """
+    执行“操作 A”：
+    1. 合并所有 rules 对象。
+    2. 检查并报告未知键。
+    3. 规范化 domain 和 domain_suffix (包括 www 移除)。
+    4. 合并和规范化 ip_cidr。
+    5. 移除空项并重写文件。
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"    [错误] 无法解析 JSON: {file_path.name} ({e})", file=sys.stderr)
+        return
+    except IOError as e:
+        print(f"    [错误] 无法读取文件: {file_path.name} ({e})", file=sys.stderr)
+        return
+
+    if 'rules' not in data or not isinstance(data['rules'], list):
+        print(f"    [警告] 格式无效，跳过 (无 'rules' 列表): {file_path.name}", file=sys.stderr)
+        return
+
+    # 允许的 sing-box 规则键
+    allowed_keys = {
+        'domain', 
+        'domain_suffix', 
+        'domain_keyword', 
+        'domain_regex', 
+        'ip_cidr'
+    }
+
+    # 1. 合并所有 rules 对象
+    all_domains = set()
+    all_domain_suffixes = set()
+    all_domain_keywords = set()
+    all_domain_regex = set()
+    all_ip_cidrs = set()
+
+    for rule_obj in data.get('rules', []):
+        if not isinstance(rule_obj, dict):
+            continue
+        
+        # 2. 检查未知键
+        unknown_keys = set(rule_obj.keys()) - allowed_keys
+        if unknown_keys:
+            print(f"[致命错误] 在 {file_path.name} 中发现未知的规则键: {unknown_keys}", file=sys.stderr)
+            print("脚本已中止。请检查 JSON 格式或更新脚本中的 'allowed_keys'。", file=sys.stderr)
+            sys.exit(1) # 按要求中止脚本
+
+        all_domains.update(rule_obj.get('domain', []))
+        all_domain_suffixes.update(rule_obj.get('domain_suffix', []))
+        all_domain_keywords.update(rule_obj.get('domain_keyword', []))
+        all_domain_regex.update(rule_obj.get('domain_regex', []))
+        all_ip_cidrs.update(rule_obj.get('ip_cidr', []))
+
+    # 3. 规范化 domain 和 domain_suffix (包含 'www' 逻辑)
+    sorted_domains, sorted_suffixes = normalize_domains_and_suffixes(all_domains, all_domain_suffixes)
+    
+    # 其余字段排序
+    sorted_keywords = sorted(list(all_domain_keywords))
+    sorted_regex = sorted(list(all_domain_regex))
+
+    # 4. 合并和规范化 ip_cidr
+    sorted_ips = merge_cidrs(all_ip_cidrs)
+
+    # 5. 重构 JSON 对象
+    domain_rule_obj = {}
+    ip_rule_obj = {}
+
+    if sorted_domains:
+        domain_rule_obj['domain'] = sorted_domains
+    if sorted_suffixes:
+        domain_rule_obj['domain_suffix'] = sorted_suffixes
+    if sorted_keywords:
+        domain_rule_obj['domain_keyword'] = sorted_keywords
+    if sorted_regex:
+        domain_rule_obj['domain_regex'] = sorted_regex
+    
+    if sorted_ips:
+        ip_rule_obj['ip_cidr'] = sorted_ips
+
+    new_rules = []
+    if domain_rule_obj: # 仅当存在至少一个域规则时才添加
+        new_rules.append(domain_rule_obj)
+    if ip_rule_obj: # 仅当存在 IP 规则时才添加
+        new_rules.append(ip_rule_obj)
+
+    # 按照您的“已处理”示例格式化
+    new_data = {"version": 1, "rules": new_rules}
+
+    # 6. 写回文件
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(new_data, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"    [错误] 无法写入文件: {file_path.name} ({e})", file=sys.stderr)
+
+# -----------------------------------------------------------------------------
+# 核心功能：加载规则数据
+# -----------------------------------------------------------------------------
+def get_rule_data(file_path: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    从已处理的文件加载域和 IP 规则对象。
+    返回 {"domain": {...}, "ip": {...}, "all_keys": {...}}
+    """
+    domain_obj = {}
+    ip_obj = {}
+    all_keys_obj = {} # 用于合并所有键
+
+    if not file_path.exists():
+        return {"domain": {}, "ip": {}, "all_keys": {}}
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        for rule in data.get('rules', []):
+            if not isinstance(rule, dict):
+                continue
+            
+            # 将所有键的值合并到 all_keys_obj
+            for key, values in rule.items():
+                if isinstance(values, list):
+                    all_keys_obj.setdefault(key, set()).update(values)
+                
+            # 分离 IP 和 Domain
+            if 'ip_cidr' in rule:
+                ip_obj = rule
+            else:
+                # 假设所有非 IP 规则都是域规则
+                domain_obj.update(rule)
+                
+    except Exception as e:
+        print(f"    [警告] 加载规则数据时出错: {file_path.name} ({e})", file=sys.stderr)
+        return {"domain": {}, "ip": {}, "all_keys": {}}
+
+    # 将 all_keys_obj 中的 set 转换为 list
+    all_keys_list_obj = {k: list(v) for k, v in all_keys_obj.items()}
+    
+    return {"domain": domain_obj, "ip": ip_obj, "all_keys": all_keys_list_obj}
+
+# -----------------------------------------------------------------------------
+# 核心功能：查找和移除 cn/!cn 之间的重复项 (增量更新)
+# -----------------------------------------------------------------------------
+def find_and_remove_dupes(file_cn_path: Path, file_noncn_path: Path, common_path: Path):
+    """
+    对比 cn 和 non-cn 文件：
+    1. 加载 cn, noncn 和 *旧的* common 数据。
+    2. 找到 cn 和 noncn 之间的 *新* 共同项。
+    3. 将 *新* 共同项与 *旧* 共同项合并，写入 common_path (非规范化)。
+    4. 从 cn 和 non-cn 文件中移除 *所有* 共同项 (包括旧的) 并保存。
+    """
+    
+    data_cn = get_rule_data(file_cn_path)
+    data_noncn = get_rule_data(file_noncn_path)
+    data_common_old = get_rule_data(common_path) # 加载已有的共同文件
+
+    new_common_all_keys = {}
+    all_rule_keys = ['domain', 'domain_suffix', 'domain_keyword', 'domain_regex', 'ip_cidr']
+
+    # --- 对比所有键 ---
+    for key in all_rule_keys:
+        set_cn = set(data_cn["all_keys"].get(key, []))
+        set_noncn = set(data_noncn["all_keys"].get(key, []))
+        set_common_old = set(data_common_old["all_keys"].get(key, []))
+        
+        # 1. 找到 *新* 的共同项
+        common_items_new = set_cn.intersection(set_noncn)
+        
+        # 2. 合并 *新*、*旧* 共同项
+        common_items_all = common_items_new.union(set_common_old)
+        
+        if common_items_all:
+            # 3. 准备写入 common 文件 (增量)
+            new_common_all_keys[key] = list(common_items_all) # 使用 list, 稍后规范化
+            
+            # 4. 更新 cn/noncn 对象 (移除 *所有* 共同项)
+            remaining_cn = set_cn - common_items_all
+            remaining_noncn = set_noncn - common_items_all
+            
+            # 更新 data_cn["all_keys"] 以便写回
+            if remaining_cn:
+                data_cn["all_keys"][key] = list(remaining_cn)
+            else:
+                data_cn["all_keys"].pop(key, None)
+                
+            # 更新 data_noncn["all_keys"] 以便写回
+            if remaining_noncn:
+                data_noncn["all_keys"][key] = list(remaining_noncn)
+            else:
+                data_noncn["all_keys"].pop(key, None)
+
+    # --- 写回文件 ---
+    
+    def write_rules_from_all_keys(file_path: Path, all_keys_data: Dict[str, Any]):
+        """根据 all_keys dict 重构并写入 JSON 文件"""
+        domain_rule_obj = {}
+        ip_rule_obj = {}
+
+        domain_keys = ['domain', 'domain_suffix', 'domain_keyword', 'domain_regex']
+        ip_keys = ['ip_cidr']
+
+        for key in domain_keys:
+            if key in all_keys_data:
+                domain_rule_obj[key] = sorted(all_keys_data[key])
+        
+        for key in ip_keys:
+             if key in all_keys_data:
+                # IP 列表在写入前不需要再次排序，它们在 merge_cidrs 阶段已经排序
+                # 但如果它们是简单地从 set 转换而来（如此处），则需要排序
+                ip_rule_obj[key] = sorted(all_keys_data[key])
+
+        new_rules = []
+        if domain_rule_obj:
+            new_rules.append(domain_rule_obj)
+        if ip_rule_obj:
+            new_rules.append(ip_rule_obj)
+            
+        new_data = {"version": 1, "rules": new_rules}
+        
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(new_data, f, indent=2, ensure_ascii=False)
+        except IOError as e:
+            print(f"    [错误] 无法写入文件: {file_path.name} ({e})", file=sys.stderr)
+
+    # 1. 保存 *增量更新* 后的 common 文件 (稍后由步骤 2C 统一规范化)
+    if new_common_all_keys:
+        write_rules_from_all_keys(common_path, new_common_all_keys)
+
+    # 2. 保存更新后的 cn 文件 (已移除共同项)
+    write_rules_from_all_keys(file_cn_path, data_cn["all_keys"])
+    
+    # 3. 保存更新后的 non-cn 文件 (已移除共同项)
+    write_rules_from_all_keys(file_noncn_path, data_noncn["all_keys"])
+
+
+# -----------------------------------------------------------------------------
+# 流程控制
+# -----------------------------------------------------------------------------
+def run_step1_pre_merge():
+    """
+    步骤 1: 预合并处理。
+    规范化 source 和 subset 目录中的所有 .json 文件。
+    """
+    print("  --- 步骤 1 (Python): 正在规范化 'source' 目录... ---")
+    SOURCE_DIR.mkdir(exist_ok=True)
+    for f in SOURCE_DIR.glob("*.json"):
+        if f.is_file():
+            print(f"    正在处理 (source): {f.name}")
+            process_json_file(f)
+            
+    print("  --- 步骤 1 (Python): 正在规范化 'subset' 目录... ---")
+    SUBSET_DIR.mkdir(exist_ok=True)
+    for f in SUBSET_DIR.glob("*.json"):
+        if f.is_file():
+            print(f"    正在处理 (subset): {f.name}")
+            process_json_file(f)
+
+def run_step2_post_merge():
+    """
+    步骤 2: 合并后处理。
+    A. 再次规范化 'source' 目录 (处理新合并的未规范化文件)。
+    B. 执行 'cn/noncn' 对比，增量更新 'common'，并从 'source' 中移除共同项。
+    C. 规范化 'common' 目录 (处理增量更新后的文件)。
+    """
+    
+    # 步骤 2A: 规范化 'source' 目录
+    print("  --- 步骤 2A (Python): 正在规范化新合并的 'source' 文件... ---")
+    for f in SOURCE_DIR.glob("*.json"):
+        # 排除带时间戳的备份 (YYYYMMDDTHHMMSSZ-...)
+        if f.is_file() and not re.match(r'^\d{8}T\d{6}Z-', f.name):
+            print(f"    正在处理 (source): {f.name}")
+            process_json_file(f)
+
+    # 步骤 2B: 对比 cn/non-cn 对，增量更新 common
+    print("  --- 步骤 2B (Python): 正在对比 cn/non-cn 并更新 'common' ... ---")
+    pairs = [
+        ("ai-cn", "ai-noncn", "ai-common"),
+        ("games-cn", "games-noncn", "games-common"),
+        ("network-cn", "network-noncn", "network-common")
+    ]
+    
+    for cn_name, noncn_name, common_name in pairs:
+        cn_path = SOURCE_DIR / f"{cn_name}.json"
+        noncn_path = SOURCE_DIR / f"{noncn_name}.json"
+        common_path = COMMON_DIR / f"{common_name}.json"
+        
+        if cn_path.exists() and noncn_path.exists():
+            print(f"    正在对比: {cn_name}.json 和 {noncn_name}.json")
+            find_and_remove_dupes(cn_path, noncn_path, common_path)
+        else:
+            print(f"    [跳过] 缺少文件对: {cn_name}.json / {noncn_name}.json")
+
+    # 步骤 2C: 规范化 'common' 目录
+    print("  --- 步骤 2C (Python): 正在规范化 'common' 目录... ---")
+    COMMON_DIR.mkdir(exist_ok=True)
+    for f in COMMON_DIR.glob("*.json"):
+        if f.is_file():
+            print(f"    正在处理 (common): {f.name}")
+            process_json_file(f)
+
+# -----------------------------------------------------------------------------
+# 主执行函数
+# -----------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(description="sing-box 规则 JSON 处理脚本")
+    parser.add_argument(
+        '--step', 
+        type=str, 
+        choices=['step1', 'step2'], 
+        required=True, 
+        help="要执行的处理步骤 ('step1' 预合并, 'step2' 合并后)"
+    )
+    args = parser.parse_args()
+
+    if args.step == 'step1':
+        print("--- 正在执行 [Python 步骤 1: 预合并] 规范化 ---")
+        run_step1_pre_merge()
+        print("--- [Python 步骤 1: 预合并] 完成 ---")
+    elif args.step == 'step2':
+        print("--- 正在执行 [Python 步骤 2: 合并后] 处理 ---")
+        run_step2_post_merge()
+        print("--- [Python 步骤 2: 合并后] 完成 ---")
+
+if __name__ == "__main__":
+    main()
+EOF
+# --- 步骤 0: 结束 ---
+
+chmod +x "$PYTHON_SCRIPT_PATH"
+echo "Python 脚本已创建于: $PYTHON_SCRIPT_PATH"
+
+# --- 步骤 1: 预处理 (下载 subset 文件) ---
+# 该函数下载并处理原始 URL，以创建 srs/json/subset/ 中的文件
 preprocess_ruleset() {
   local base_url="$1"
   local exclude_url="$2"
   local output_file="$3"
-  local output_type="$4"
+  local output_type="$4" # 'cn' or '!cn' (jq logic is same)
 
-  echo "Preprocessing: $base_url - $exclude_url -> $output_file ($output_type)"
+  echo "Preprocessing subset: $output_file"
 
-  local base_temp="temp/base_$$.json"
-  local exclude_temp="temp/exclude_$$.json"
+  local base_temp="${TEMP_DIR}/base_$$.json"
+  local exclude_temp="${TEMP_DIR}/exclude_$$.json"
 
-  wget -q --timeout=180 --tries=3 "$base_url" -O "$base_temp" || return 1
-  wget -q --timeout=180 --tries=3 "$exclude_url" -O "$exclude_temp" || return 1
+  # 下载规则：tries=1, 超时180, 失败则退出
+  echo "  Downloading base: $base_url"
+  wget -q --timeout=180 --tries=1 "$base_url" -O "$base_temp" || { echo "Error: [致命] 无法下载 $base_url"; rm -f "$base_temp" "$exclude_temp"; exit 1; }
+  
+  echo "  Downloading exclude: $exclude_url"
+  wget -q --timeout=180 --tries=1 "$exclude_url" -O "$exclude_temp" || { echo "Error: [致命] 无法下载 $exclude_url"; rm -f "$base_temp" "$exclude_temp"; exit 1; }
 
-  if [ "$output_type" = "cn" ]; then
-    # 从基础文件中移除排除文件中的规则（cn 情况）
-    jq --slurpfile exclude "$exclude_temp" '
-      .rules as $base_rules |
-      $exclude[0].rules as $exclude_rules |
-      {
-        version: 1,
-        rules: $base_rules | map(
-          . as $rule |
-          if ($exclude_rules | any(. == $rule)) then
-            empty
-          else
-            $rule
-          end
-        )
-      }
-    ' "$base_temp" > "$output_file"
-  else
-    # 从基础文件中移除排除文件中的规则（!cn 情况）
-    jq --slurpfile exclude "$exclude_temp" '
-      .rules as $base_rules |
-      $exclude[0].rules as $exclude_rules |
-      {
-        version: 1,
-        rules: $base_rules | map(
-          . as $rule |
-          if ($exclude_rules | any(. == $rule)) then
-            empty
-          else
-            $rule
-          end
-        )
-      }
-    ' "$base_temp" > "$output_file"
-  fi
+  # jq 逻辑：从 base_rules 中移除 exclude_rules 中存在的规则
+  jq --slurpfile exclude "$exclude_temp" '
+    .rules as $base_rules |
+    $exclude[0].rules as $exclude_rules |
+    {
+      version: 1,
+      rules: $base_rules | map(
+        . as $rule |
+        if ($exclude_rules | any(. == $rule)) then
+          empty
+        else
+          $rule
+        end
+      )
+    }
+  ' "$base_temp" > "$output_file"
 
   rm -f "$base_temp" "$exclude_temp"
 
   if jq empty "$output_file" >/dev/null 2>&1; then
-    echo "Successfully generated: $output_file"
-    return 0
+    echo "  Successfully generated subset: $output_file"
   else
-    echo "Error: Generated invalid JSON for $output_file"
+    echo "Error: [致命] 为 $output_file 生成了无效的 JSON"
     rm -f "$output_file"
-    return 1
+    exit 1
   fi
 }
 
-# 预处理配置数组格式: "基础文件URL" "排除文件URL" "输出文件路径" "输出类型"
+# 预处理配置数组 (输出到 SUBSET_DIR)
 preprocess_configs=(
 # game
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games-cn.json"
@@ -144,361 +571,255 @@ preprocess_configs=(
   "!cn"
 )
 
-echo "Starting preprocessing..."
+echo "--- 步骤 1: 正在运行 'subset' 文件预处理 (下载) ---"
+# 并行执行 preprocess_ruleset
+pids=()
 for ((i=0; i<${#preprocess_configs[@]}; i+=4)); do
-  base_url="${preprocess_configs[i]}"
-  exclude_url="${preprocess_configs[i+1]}"
-  output_file="${preprocess_configs[i+2]}"
-  output_type="${preprocess_configs[i+3]}"
-
-  preprocess_ruleset "$base_url" "$exclude_url" "$output_file" "$output_type" || echo "Failed to process: $base_url"
+  preprocess_ruleset "${preprocess_configs[i]}" "${preprocess_configs[i+1]}" "${preprocess_configs[i+2]}" "${preprocess_configs[i+3]}" &
+  pids+=($!)
 done
+# 等待所有后台下载任务完成
+echo "  Waiting for ${#pids[@]} subset generation jobs..."
+wait "${pids[@]}"
+echo "--- 步骤 1: 'subset' 文件预处理完成 ---"
 
-echo "Preprocessing completed!"
 
-# 优化的JSON文件处理函数，避免参数过长
-optimize_json_file() {
-  local json_file="$1"
-  local temp_file="${json_file}.tmp"
-  local before_size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
+# --- 步骤 2: 运行 Python 预合并规范化 ---
+echo "--- 步骤 2: 正在运行 [Python 步骤 1] (预合并规范化) ---"
+"$PYTHON_SCRIPT_PATH" --step step1
+echo "--- 步骤 2: [Python 步骤 1] 完成 ---"
 
-  echo "Optimizing JSON file: $json_file (before size: $before_size bytes)"
 
-  if [ ! -f "$json_file" ]; then
-    echo " File not found, skipping"
-    return 0
-  fi
+# --- JSON 验证和修复 (用于下载的文件) ---
+validate_and_fix_json() {
+  local file="$1"
+  local group_name="$2"
 
-  if ! jq empty "$json_file" >/dev/null 2>&1; then
-    echo " Invalid JSON, skipping optimization"
+  if [ ! -f "$file" ] || [ ! -s "$file" ]; then
+    echo "    [警告] 文件未找到或为空: $file"
     return 1
   fi
 
-  # 创建临时jq脚本文件来处理大文件
-  local jq_script="temp/optimize_$$.jq"
-  cat > "$jq_script" << 'EOF'
-# 确保输入是数组，处理字符串和数组混合的情况
-def ensure_array:
-  if . == null then []
-  elif type == "string" then [.]
-  elif type == "array" then
-    map(if type == "string" then . else tostring end)
-  else [tostring] end;
-# 处理domain：去掉首位的点，去重排序
-def process_domain:
-  ensure_array | map(if startswith(".") then .[1:] else . end) | unique | sort;
-# 处理domain_suffix：确保有首位的点，去重排序
-def process_domain_suffix:
-  ensure_array | map(if startswith(".") then . else "." + . end) | unique | sort;
-# 处理其他字段：去重排序
-def process_other:
-  ensure_array | unique | sort;
-if .rules then
-  .rules |= map(
-    . as $rule |
-    {
-      # 单独处理每个字段，使用空数组作为默认值
-      domain: (($rule.domain // []) | process_domain),
-      domain_suffix: (($rule.domain_suffix // []) | process_domain_suffix),
-      domain_keyword: (($rule.domain_keyword // []) | process_other),
-      domain_regex: (($rule.domain_regex // []) | process_other),
-      ip_cidr: (($rule.ip_cidr // []) | process_other)
-    }
-  )
-else
-  .
-end
-EOF
-
-  # 使用文件方式执行jq脚本，避免参数过长
-  if ! jq -f "$jq_script" "$json_file" > "$temp_file"; then
-    echo " Error in first optimization step"
-    rm -f "$jq_script" "$temp_file"
-    return 1
-  fi
-  mv "$temp_file" "$json_file"
-
-  # 第二步优化
-  cat > "$jq_script" << 'EOF'
-def ensure_array:
-  if . == null then []
-  elif type == "string" then [.]
-  elif type == "array" then
-    map(if type == "string" then . else tostring end)
-  else [tostring] end;
-if .rules then
-  .rules |= map(
-    . as $rule |
-    {
-      # 从domain生成domain_suffix
-      domain_suffix: ((($rule.domain_suffix // []) | ensure_array) + (($rule.domain // []) | ensure_array | map("." + .)) | unique | sort),
-      # 从domain_suffix生成domain
-      domain: ((($rule.domain // []) | ensure_array) + (($rule.domain_suffix // []) | ensure_array | map(if startswith(".") then .[1:] else . end)) | unique | sort),
-      # 其他字段保持不变
-      domain_keyword: ($rule.domain_keyword // []) | ensure_array,
-      domain_regex: ($rule.domain_regex // []) | ensure_array,
-      ip_cidr: ($rule.ip_cidr // []) | ensure_array
-    }
-  )
-else
-  .
-end
-EOF
-
-  if ! jq -f "$jq_script" "$json_file" > "$temp_file"; then
-    echo " Error in second optimization step"
-    rm -f "$jq_script" "$temp_file"
-    return 1
-  fi
-  mv "$temp_file" "$json_file"
-  rm -f "$jq_script"
-
-  # 合并ip_cidr网段
-  local ip_cidr_json=$(jq '.rules[0].ip_cidr // []' "$json_file")
-  if [ "$ip_cidr_json" != "[]" ] && [ "$ip_cidr_json" != "null" ]; then
-    local ip_temp_file="temp/ip_cidr_$$.json"
-    echo "$ip_cidr_json" > "$ip_temp_file"
-    local merged_ip_cidr
-    merged_ip_cidr=$(python3 -c "
-import ipaddress
-import json
-import sys
-def merge_ip_cidrs(ip_list):
-    try:
-        if not ip_list:
-            return []
-        # 分离IPv4和IPv6
-        ipv4_networks = []
-        ipv6_networks = []
-        for ip_cidr in ip_list:
-            try:
-                network = ipaddress.ip_network(ip_cidr, strict=False)
-                if network.version == 4:
-                    ipv4_networks.append(network)
-                else:
-                    ipv6_networks.append(network)
-            except ValueError as e:
-                print(f'Invalid CIDR skipped: {ip_cidr} ({e})', file=sys.stderr)
-                continue
-        # 分别合并IPv4和IPv6
-        merged_ipv4 = list(ipaddress.collapse_addresses(sorted(ipv4_networks)))
-        merged_ipv6 = list(ipaddress.collapse_addresses(sorted(ipv6_networks)))
-        # 合并结果
-        result = [str(net) for net in merged_ipv4 + merged_ipv6]
-        return result
-    except Exception as e:
-        print(f'Error merging IP CIDRs: {e}', file=sys.stderr)
-        return ip_list
-# 从文件读取数据
-try:
-    with open(sys.argv[1], 'r') as f:
-        ip_cidrs = json.load(f)
-    merged = merge_ip_cidrs(ip_cidrs)
-    print(json.dumps(merged))
-except Exception as e:
-    print('[]')
-    print(f'File processing error: {e}', file=sys.stderr)
-" "$ip_temp_file")
-    rm -f "$ip_temp_file"
-    # 更新回JSON
-    if [ "$merged_ip_cidr" != "[]" ]; then
-      jq ".rules[0].ip_cidr = $merged_ip_cidr" "$json_file" > "$temp_file" && mv "$temp_file" "$json_file"
+  if jq empty "$file" >/dev/null 2>&1; then
+    # JSON 有效，检查 'version'
+    if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
+      echo "    [修复] 正在为 $file 添加 'version' 字段"
+      jq '.version = 1' "$file" > "${file}.tmp.$$" && mv "${file}.tmp.$$" "$file"
     fi
-  fi
+    return 0
+  else
+    echo "    [警告] $file 中 JSON 无效, 尝试修复..."
+    local temp_file="${file}.fixed.$$"
+    
+    # 尝试 1: 简单格式化
+    if jq '.' "$file" > "$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$file"
+      echo "    [修复] 使用 'jq .' 成功修复"
+      return 0
+    fi
+    
+    # 尝试 2: 包装数组
+    if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$file"
+      echo "    [修复] 成功包装了裸数组"
+      # 再次调用以确保 version 存在 (如果它不是数组)
+      validate_and_fix_json "$file" "$group_name"
+      return 0
+    fi
 
-  local after_size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
-  local reduction=$((before_size - after_size))
-  echo " Optimization completed (after size: $after_size bytes, reduced: $reduction bytes)"
+    echo "    [错误] 无法修复 JSON: $file"
+    rm -f "$file" "$temp_file"
+    return 1
+  fi
 }
 
-# 操作a：对比CN和!CN分组，找出相同部分
-compare_cn_pairs() {
-  local cn_file="$1"
-  local noncn_file="$2"
-  local output_file="$3"
-  echo "Comparing CN pairs: $cn_file vs $noncn_file"
-  if [ ! -f "$cn_file" ] || [ ! -f "$noncn_file" ]; then
-    echo " One or both files not found, skipping comparison"
-    return 0
-  fi
-  # 验证文件格式
-  if ! jq empty "$cn_file" >/dev/null 2>&1 || ! jq empty "$noncn_file" >/dev/null 2>&1; then
-    echo " One or both files have invalid JSON, skipping comparison"
-    return 0
-  fi
-  # DEBUG: 显示文件大小
-  local cn_size=$(stat -c %s "$cn_file" 2>/dev/null || echo 0)
-  local noncn_size=$(stat -c %s "$noncn_file" 2>/dev/null || echo 0)
-  echo " File sizes - CN: $cn_size bytes, !CN: $noncn_size bytes"
-  # 找出相同部分
-  local same_temp="${output_file}.temp"
-  if ! jq -n --slurpfile cn "$cn_file" --slurpfile noncn "$noncn_file" '
-    def find_common($a; $b):
-      if $a and $b then
-        $a | map(select(. as $item | $b | index($item)))
-      else
-        []
-      end;
-    def get_field($file; $field):
-      if $file[0].rules and ($file[0].rules | length > 0) and $file[0].rules[0][$field] then
-        $file[0].rules[0][$field]
-      else
-        []
-      end;
-    {
-      version: 1,
-      rules: [
-        {
-          domain: find_common(get_field($cn; "domain"); get_field($noncn; "domain")),
-          domain_suffix: find_common(get_field($cn; "domain_suffix"); get_field($noncn; "domain_suffix")),
-          domain_keyword: find_common(get_field($cn; "domain_keyword"); get_field($noncn; "domain_keyword")),
-          domain_regex: find_common(get_field($cn; "domain_regex"); get_field($noncn; "domain_regex")),
-          ip_cidr: find_common(get_field($cn; "ip_cidr"); get_field($noncn; "ip_cidr"))
-        }
-      ]
-    }
-  ' > "$same_temp" 2>/dev/null; then
-    echo " Failed to compare files, skipping"
-    rm -f "$same_temp"
-    return 0
-  fi
-  # DEBUG: 显示共同部分的大小
-  local same_size=$(stat -c %s "$same_temp" 2>/dev/null || echo 0)
-  echo " Common parts temp file size: $same_size bytes"
-  # 检查是否为空
-  local is_empty=$(jq '
-    .rules[0] |
-    [.domain, .domain_suffix, .domain_keyword, .domain_regex, .ip_cidr] |
-    map(if . then length else 0 end) |
-    add == 0
-  ' "$same_temp" 2>/dev/null)
-  if [ "$is_empty" = "true" ]; then
-    # DEBUG: 显示各字段的长度
-    jq '.rules[0] | with_entries(.value |= length)' "$same_temp" 2>/dev/null || echo " Cannot display field lengths"
-    echo " No common parts found, skipping save to $output_file"
-    rm -f "$same_temp"
-    return 0
-  fi
-  mv "$same_temp" "$output_file"
-  # 从原文件中移除相同部分，添加错误处理
-  for file in "$cn_file" "$noncn_file"; do
-    local temp_file="${file}.tmp"
-    if jq --slurpfile common "$output_file" '
-      def remove_common($arr; $common_arr):
-        if $arr and $common_arr then $arr - $common_arr else $arr end;
-      if .rules and (.rules | length > 0) then
-        .rules[0].domain = remove_common(.rules[0].domain; $common[0].rules[0].domain) |
-        .rules[0].domain_suffix = remove_common(.rules[0].domain_suffix; $common[0].rules[0].domain_suffix) |
-        .rules[0].domain_keyword = remove_common(.rules[0].domain_keyword; $common[0].rules[0].domain_keyword) |
-        .rules[0].domain_regex = remove_common(.rules[0].domain_regex; $common[0].rules[0].domain_regex) |
-        .rules[0].ip_cidr = remove_common(.rules[0].ip_cidr; $common[0].rules[0].ip_cidr)
-      else
-        .
-      end
-    ' "$file" > "$temp_file"; then
-      mv "$temp_file" "$file"
-      echo "  Updated: $(basename "$file")"
+# --- 合并函数 (仅合并，不编译) ---
+merge_group() {
+  local GROUP_NAME=$1
+  shift
+  local URLS=("$@")
+  # 目标文件现在是 SOURCE_DIR
+  local LOCAL_JSON_FILE="${SOURCE_DIR}/${GROUP_NAME}.json"
+  
+  rm -f "${TEMP_DIR}/input-${GROUP_NAME}-"*.json
+
+  echo "Starting merge for group: $GROUP_NAME"
+
+  local i=1
+  local pids=()
+  local local_files=()
+  local remote_urls=()
+
+  # 区分本地源和 URL 源
+  for url in "${URLS[@]}"; do
+    if [ -z "$url" ]; then
+      continue
+    fi
+    # 检查是否为本地路径 (srs/, ./, /)
+    if [[ "$url" == ${SOURCE_DIR}/* ]] || [[ "$url" == ${SUBSET_DIR}/* ]] || [[ "$url" == ./* ]] || [[ "$url" == /* ]]; then
+      local_files+=("$url")
     else
-      echo "  Failed to update: $(basename "$file")"
-      rm -f "$temp_file"
+      remote_urls+=("$url")
     fi
   done
-  echo " Comparison completed, common parts saved to: $output_file"
+
+  # --- 1. 处理本地文件 (复制) ---
+  for file_path in "${local_files[@]}"; do
+    local output_file="${TEMP_DIR}/input-$GROUP_NAME-$i.json"
+    if [ -f "$file_path" ] && [ -s "$file_path" ]; then
+      cp "$file_path" "$output_file"
+      echo "  Copied local file: $file_path"
+      ((i++))
+    else
+      echo "  [警告] 本地文件 $file_path 未找到或为空, 跳过。"
+    fi
+  done
+
+  # --- 2. 处理远程 URL (并行下载) ---
+  for url in "${remote_urls[@]}"; do
+    local current_i=$i
+    (
+      local file_index=$current_i
+      local output_file="${TEMP_DIR}/input-$GROUP_NAME-$file_index.json"
+      
+      echo "  Downloading: $url"
+      if wget -q --timeout=180 --tries=1 "$url" -O "$output_file"; then
+        echo "    Downloaded: $url"
+        # 立即验证下载的文件
+        if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
+          echo "    [错误] 下载的 $url 无效, 已删除。"
+          rm -f "$output_file"
+        fi
+      else
+        echo "Error: [致命] 无法下载 $url (group $GROUP_NAME)"
+        # 杀死父脚本
+        kill -s TERM $$
+      fi
+    ) &
+    pids+=($!)
+    ((i++))
+  done
+
+  # 等待所有下载完成
+  if [ ${#pids[@]} -gt 0 ]; then
+    echo "  Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
+    # 'wait' 会在 'set -e' 下自动检查失败的子进程
+    wait "${pids[@]}"
+    echo "  Downloads for $GROUP_NAME finished."
+  fi
+
+  # --- 3. 合并 ---
+  shopt -s nullglob
+  local inputs=("${TEMP_DIR}/input-${GROUP_NAME}-"*.json)
+  shopt -u nullglob
+
+  if [ "${#inputs[@]}" -eq 0 ]; then
+    echo "Error: [致命] 组 $GROUP_NAME 没有可用的输入文件 — 停止合并。"
+    exit 1
+  fi
+
+  echo "  Merging ${#inputs[@]} files for group $GROUP_NAME..."
+  local merged_tmp="${TEMP_DIR}/merged-${GROUP_NAME}.json"
+  local config_flags=()
+  for input_file in "${inputs[@]}"; do
+    config_flags+=("-c" "$input_file")
+  done
+
+  if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
+    echo "Error: [致命] sing-box 合并 $GROUP_NAME 失败"
+    exit 1
+  fi
+
+  # --- 4. 备份和替换 ---
+  # 规范化 (步骤 1) 后的 $LOCAL_JSON_FILE 现在是旧文件
+  if [ -f "$LOCAL_JSON_FILE" ]; then
+    local TIMESTAMP
+    TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+    local backup_file="${SOURCE_DIR}/${TIMESTAMP}-${GROUP_NAME}.json"
+    mv -f "$LOCAL_JSON_FILE" "$backup_file"
+    echo "  Backed up old source to: $backup_file"
+  fi
+
+  # 移动新合并的 (未规范化的) 文件
+  mv -f "$merged_tmp" "$LOCAL_JSON_FILE"
+  echo "  Saved merged UNPROCESSED JSON to: $LOCAL_JSON_FILE"
+
+  rm -f "${TEMP_DIR}/input-${GROUP_NAME}-"*.json
+  echo "Completed merge for $GROUP_NAME"
 }
 
-# 执行操作a：优化所有JSON文件并对比CN/!CN分组
-echo "Starting operation A: JSON optimization and CN/!CN comparison..."
-# 首先优化所有现有的JSON文件
-for json_file in srs/json/*.json; do
-  if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
-    optimize_json_file "$json_file"
-  fi
-done
+# --- 编译函数 (单独) ---
+compile_srs_file() {
+  local GROUP_NAME=$1
+  local LOCAL_JSON_FILE="${SOURCE_DIR}/${GROUP_NAME}.json"
+  local OUTPUT_SRS_FILE="${SRS_DIR}/${GROUP_NAME}.srs"
 
-# 确保 geoip-private.json 存在
-if [ ! -f "srs/json/geoip-private.json" ]; then
-  echo "Creating geoip-private.json..."
-  cat > "srs/json/geoip-private.json" << 'EOF'
-{
-  "version": 1,
-  "rules": [
-    {
-      "ip_cidr": [
-        "0.0.0.0/8",
-        "10.0.0.0/8",
-        "100.64.0.0/10",
-        "127.0.0.0/8",
-        "169.254.0.0/16",
-        "172.16.0.0/12",
-        "192.0.0.0/24",
-        "192.0.2.0/24",
-        "192.31.196.0/24",
-        "192.52.193.0/24",
-        "192.88.99.0/24",
-        "192.168.0.0/16",
-        "192.175.48.0/24",
-        "198.18.0.0/15",
-        "198.51.100.0/24",
-        "203.0.113.0/24",
-        "224.0.0.0/4",
-        "233.252.0.0/24",
-        "240.0.0.0/4",
-        "255.255.255.255/32",
-        "::/128",
-        "::1/128",
-        "::ffff:0:0/96",
-        "64:ff9b::/96",
-        "64:ff9b:1::/48",
-        "100::/64",
-        "2001::/23",
-        "2001:db8::/32",
-        "2002::/16",
-        "2620:4f:8000::/48",
-        "3fff::/20",
-        "5f00::/16",
-        "fc00::/7",
-        "fe80::/10",
-        "ff00::/8"
-      ]
-    }
-  ]
+  if [ ! -f "$LOCAL_JSON_FILE" ]; then
+    echo "  [警告] 编译跳过: 未找到 $LOCAL_JSON_FILE"
+    return
+  fi
+
+  # 查找此组的最新备份
+  local json_backup
+  json_backup=$(find "$SOURCE_DIR" -name "*-${GROUP_NAME}.json" -type f | sort -r | head -n 1)
+
+  echo "  Compiling SRS file for $GROUP_NAME..."
+  if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
+    echo "    Successfully compiled: $OUTPUT_SRS_FILE"
+  else
+    echo "    Error: [致命] 编译 $GROUP_NAME 失败"
+    if [ -n "$json_backup" ] && [ -f "$json_backup" ]; then
+      cp -a "$json_backup" "$LOCAL_JSON_FILE"
+      echo "    Restored JSON from most recent backup: $json_backup"
+      # 尝试用备份重新编译
+      if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
+        echo "    Successfully compiled restored backup."
+      else
+        echo "    Error: [致命] 连备份 $json_backup 都编译失败！"
+        exit 1
+      fi
+    else
+      echo "    Error: [致命] 编译失败且未找到备份文件可恢复。"
+      exit 1
+    fi
+  fi
 }
-EOF
-  echo "Created default geoip-private.json"
-fi
 
-# DEBUG: Before CN/!CN comparison
-echo "=== Debug: Before CN/!CN comparison ==="
-for pair in "ai-cn:ai-noncn" "games-cn:games-noncn" "network-cn:network-noncn"; do
-  cn_file="srs/json/$(echo $pair | cut -d: -f1).json"
-  noncn_file="srs/json/$(echo $pair | cut -d: -f2).json"
-  if [ -f "$cn_file" ] && [ -f "$noncn_file" ]; then
-    echo "Checking $cn_file and $noncn_file:"
-    for field in domain domain_suffix domain_keyword domain_regex ip_cidr; do
-      cn_count=$(jq -r ".rules[0].$field | length" "$cn_file" 2>/dev/null || echo "0")
-      noncn_count=$(jq -r ".rules[0].$field | length" "$noncn_file" 2>/dev/null || echo "0")
-      echo " $field: CN=$cn_count, !CN=$noncn_count"
-    done
-  fi
-done
-echo "=== End Debug ==="
+compile_all_srs() {
+  echo "--- 步骤 5: 正在编译所有 SRS 文件 ---"
+  local groups=("ads" "games-cn" "games-noncn" "ai-cn" "ai-noncn" "media" "network-cn" "network-noncn" "cdn" "hkmotw" "private")
+  
+  local pids=()
+  for group in "${groups[@]}"; do
+    # 并行编译
+    compile_srs_file "$group" &
+    pids+=($!)
+  done
+  
+  echo "  Waiting for ${#pids[@]} compile jobs..."
+  wait "${pids[@]}"
+  echo "--- 步骤 5: SRS 编译完成 ---"
+}
 
-# 对比CN和!CN分组
-compare_cn_pairs "srs/json/ai-cn.json" "srs/json/ai-noncn.json" "srs/json/same/ai-same.json"
-compare_cn_pairs "srs/json/games-cn.json" "srs/json/games-noncn.json" "srs/json/same/games-same.json"
-compare_cn_pairs "srs/json/network-cn.json" "srs/json/network-noncn.json" "srs/json/same/network-same.json"
+# --- 清理备份 ---
+cleanup_old_backups() {
+  echo "--- 步骤 6: 正在清理旧备份 (每组保留 3 个) ---"
+  local groups=("ads" "games-cn" "games-noncn" "ai-cn" "ai-noncn" "media" "network-cn" "network-noncn" "cdn" "hkmotw" "private")
+  
+  for group in "${groups[@]}"; do
+    # 查找、排序、跳过前 3 个，然后删除其余的
+    find "$SOURCE_DIR" -name "*-${group}.json" -type f | sort -r | tail -n +4 | xargs -r rm -f 2>/dev/null || true
+  done
+  echo "--- 步骤 6: 备份清理完成 ---"
+}
 
-# 优化相同部分的JSON文件
-for same_file in srs/json/same/*.json; do
-  if [ -f "$same_file" ]; then
-    optimize_json_file "$same_file"
-  fi
-done
-echo "Operation A completed!"
+# --- URL 定义 (路径已更新) ---
+# *** 遵照您的要求，省略了庞大的 URL 列表内容 ***
+# *** 脚本会使用您在下面数组中定义的 ${SOURCE_DIR} 和 ${SUBSET_DIR} 中的本地文件 ***
+# *** 以及您在此处添加的任何远程 URL ***
 
-# URL定义阶段
 ads_urls=(
-  "srs/json/ads.json"
+  "${SOURCE_DIR}/ads.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-acfun-ads.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-acfun-ads@ads.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-acfun@ads.json"
@@ -689,9 +1010,9 @@ ads_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-youku-ads@ads.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-win-spy.json"
 )
-
 games_cn_urls=(
-  "srs/json/games-cn.json"
+  "${SOURCE_DIR}/games-cn.json"
+  "${SUBSET_DIR}/geosite-category-games-cn@cn2.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-bilibili-game@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-bluepoch-games@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-gamersky.json"
@@ -704,11 +1025,12 @@ games_cn_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games-!cn@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games-cn@cn.json"
-  "srs/json/geosite-category-games-cn@cn2.json"
 )
-
 games_noncn_urls=(
-  "srs/json/games-noncn.json"
+  "${SOURCE_DIR}/games-noncn.json"
+  "${SUBSET_DIR}/geosite-category-games-!cn@!cn.json"
+  "${SUBSET_DIR}/game-platforms-download@!cn.json"
+  "${SUBSET_DIR}/geosite-epicgames@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-cygames.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-steam.json"
@@ -716,23 +1038,19 @@ games_noncn_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-tencent-games@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-wbgames.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-games-cn@!cn.json"
-  "srs/json/geosite-category-games-!cn@!cn.json"
-  "srs/json/game-platforms-download@!cn.json"
-  "srs/json/geosite-epicgames@!cn.json"
 )
-
 ai_cn_urls=(
-  "srs/json/ai-cn.json"
+  "${SOURCE_DIR}/ai-cn.json"
+  "${SUBSET_DIR}/doubao@cn.json"
+  "${SUBSET_DIR}/geosite-category-ai-cn@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-jetbrains@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-deepseek.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-aixcoder.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-apple-intelligence.json"
-  "srs/json/doubao@cn.json"
-  "srs/json/geosite-category-ai-cn@cn.json"
 )
-
 ai_noncn_urls=(
-  "srs/json/ai-noncn.json"
+  "${SOURCE_DIR}/ai-noncn.json"
+  "${SUBSET_DIR}/jetbrains@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-ai-!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-ai-chat-!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-ai-cn@!cn.json"
@@ -745,18 +1063,19 @@ ai_noncn_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-anthropic.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-jetbrains-ai.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-doubao@!cn.json"
-  "srs/json/jetbrains@!cn.json"
 )
-
 media_urls=(
-  "srs/json/media.json"
+  "${SOURCE_DIR}/media.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-netflix.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-netflix.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-disney.json"
 )
-
 network_cn_urls=(
-  "srs/json/network-cn.json"
+  "${SOURCE_DIR}/network-cn.json"
+  "${SUBSET_DIR}/geosite-category-social-media-cn@cn.json"
+  "${SUBSET_DIR}/geosite-category-bank-cn@cn.json"
+  "${SUBSET_DIR}/geosite-category-dev-cn@cn2.json"
+  "${SUBSET_DIR}/geosite-category-entertainment-cn@cn2.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-china-list.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-cn.json"
@@ -942,14 +1261,10 @@ network_cn_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-xbox@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-yahoo@cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-youtube@cn.json"
-  "srs/json/geosite-category-social-media-cn@cn.json"
-  "srs/json/geosite-category-bank-cn@cn.json"
-  "srs/json/geosite-category-dev-cn@cn2.json"
-  "srs/json/geosite-category-entertainment-cn@cn2.json"
 )
-
 network_noncn_urls=(
-  "srs/json/network-noncn.json"
+  "${SOURCE_DIR}/network-noncn.json"
+  "${SUBSET_DIR}/geosite-category-social-media-!cn@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-facebook.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-telegram.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-twitter.json"
@@ -1007,182 +1322,29 @@ network_noncn_urls=(
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-vivo@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-xiaomi@!cn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-zte@!cn.json"
-  "srs/json/geosite-category-social-media-!cn@!cn.json"
 )
-
 cdn_urls=(
-  "srs/json/cdn.json"
+  "${SOURCE_DIR}/cdn.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-cloudflare.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-cloudfront.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-fastly.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-google.json"
 )
-
 hkmotw_urls=(
-  "srs/json/hkmotw.json"
+  "${SOURCE_DIR}/hkmotw.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-hk.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-mo.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-tw.json"
 )
-
 private_urls=(
-  "srs/json/private.json"
-  "srs/json/geoip-private.json"
+  "${SOURCE_DIR}/private.json"
+  "${SOURCE_DIR}/geoip-private.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-private.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-private.json"
 )
 
-validate_and_fix_json() {
-  local file="$1"
-  local group_name="$2"
-  if [ ! -f "$file" ] || [ ! -s "$file" ]; then
-    echo " File not found or empty: $file"
-    return 1
-  fi
-  if ! jq empty "$file" >/dev/null 2>&1; then
-    echo " Invalid JSON in $file, attempting to fix..."
-    local temp_file="${file}.fixed"
-    if jq '.' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo " Fixed JSON using jq"
-      return 0
-    fi
-    if jq 'if type == "array" then {version: 1, rules: .} else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo " Added version to rules array"
-      return 0
-    fi
-    if jq 'if .rules and (.version | not) then .version = 1 else . end' "$file" > "$temp_file" 2>/dev/null; then
-      mv "$temp_file" "$file"
-      echo " Added version field"
-      return 0
-    fi
-    echo " Could not fix JSON: $file"
-    rm -f "$file" "$temp_file"
-    return 1
-  fi
-  if ! jq 'has("version")' "$file" 2>/dev/null | grep -q true; then
-    echo " Adding version field to $file"
-    jq '.version = 1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-  fi
-  return 0
-}
-
-merge_group()
-{
-  local GROUP_NAME=$1
-  shift
-  local URLS=("$@")
-  local LOCAL_JSON_FILE="${URLS[0]}"
-  local OUTPUT_SRS_FILE="srs/${GROUP_NAME}.srs"
-  local TIMESTAMP
-  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-  rm -f temp/input-"$GROUP_NAME"-*.json
-  rm -f "$OUTPUT_SRS_FILE"
-  echo "Starting merge for group: $GROUP_NAME"
-  local i=1
-  local pids=()
-  for url in "${URLS[@]}"; do
-    if [ -z "$url" ]; then
-      continue
-    fi
-    local current_i=$i
-    (
-      local file_index=$current_i
-      local output_file="temp/input-$GROUP_NAME-$file_index.json"
-      if [[ "$url" == /* ]] || [[ "$url" == ./* ]] || [[ "$url" == srs/* ]]; then
-        if [ -f "$url" ] && [ -s "$url" ]; then
-          cp "$url" "$output_file"
-          echo "Copied local file: $url"
-        else
-          echo "Warning: local file $url not found or empty"
-          rm -f "$output_file"
-        fi
-      else
-        echo "Downloading: $url"
-        if wget -q --timeout=60 --tries=3 "$url" -O "$output_file"; then
-          echo " Downloaded: $url"
-        else
-          echo "Warning: failed to download $url (group $GROUP_NAME)"
-          rm -f "$output_file"
-        fi
-      fi
-      if [ -f "$output_file" ]; then
-        if ! validate_and_fix_json "$output_file" "$GROUP_NAME"; then
-          echo " Removing invalid file: $output_file"
-          rm -f "$output_file"
-        fi
-      fi
-    ) &
-    pids+=($!)
-    ((i++))
-  done
-  if [ ${#pids[@]} -gt 0 ]; then
-    echo "Waiting for ${#pids[@]} downloads for group $GROUP_NAME..."
-    wait "${pids[@]}" 2>/dev/null
-    echo "Downloads for $GROUP_NAME finished."
-  fi
-  shopt -s nullglob
-  local inputs=(temp/input-"$GROUP_NAME"-*.json)
-  shopt -u nullglob
-  if [ "${#inputs[@]}" -eq 0 ]; then
-    echo "Error: no input files available for group $GROUP_NAME — skipping merge."
-    return 1
-  fi
-  echo "Found ${#inputs[@]} valid input files for group $GROUP_NAME"
-  local valid_inputs=()
-  for input_file in "${inputs[@]}"; do
-    if validate_and_fix_json "$input_file" "$GROUP_NAME"; then
-      valid_inputs+=("$input_file")
-    else
-      echo " Skipping invalid file: $input_file"
-    fi
-  done
-  if [ ${#valid_inputs[@]} -eq 0 ]; then
-    echo "Error: no valid input files after validation for group $GROUP_NAME"
-    return 1
-  fi
-  echo "Using ${#valid_inputs[@]} valid files for merging"
-  local merged_tmp="temp/merged-$GROUP_NAME.json"
-  local config_flags=()
-  for input_file in "${valid_inputs[@]}"; do
-    config_flags+=("-c" "$input_file")
-  done
-  echo "Merging ${#valid_inputs[@]} files for group $GROUP_NAME..."
-  if ! sing-box rule-set merge "$merged_tmp" "${config_flags[@]}"; then
-    echo "Error: Failed to merge JSON files for $GROUP_NAME"
-    return 1
-  fi
-  # 在编译SRS前进行优化
-  echo "Optimizing merged JSON before compilation..."
-  optimize_json_file "$merged_tmp"
-  if ! validate_and_fix_json "$merged_tmp" "$GROUP_NAME"; then
-    echo "Error: Merged file is invalid"
-    return 1
-  fi
-  local json_backup="srs/json/${GROUP_NAME}.json.bak.${TIMESTAMP}"
-  if [ -f "$LOCAL_JSON_FILE" ]; then
-    cp -a "$LOCAL_JSON_FILE" "$json_backup"
-  fi
-  mkdir -p "$(dirname "$LOCAL_JSON_FILE")"
-  mv -f "$merged_tmp" "$LOCAL_JSON_FILE"
-  echo "Saved merged JSON to: $LOCAL_JSON_FILE (backup: $json_backup)"
-  echo "Compiling SRS file for $GROUP_NAME..."
-  if sing-box rule-set compile "$LOCAL_JSON_FILE" -o "$OUTPUT_SRS_FILE"; then
-    echo "Successfully compiled: $OUTPUT_SRS_FILE"
-  else
-    echo "Error: Failed to compile SRS for $GROUP_NAME"
-    if [ -f "$json_backup" ]; then
-      cp -a "$json_backup" "$LOCAL_JSON_FILE"
-      echo "Restored JSON from backup: $json_backup"
-    fi
-    return 1
-  fi
-  rm -f temp/input-"$GROUP_NAME"-*.json
-  echo "Completed group $GROUP_NAME -> JSON: $LOCAL_JSON_FILE, SRS: $OUTPUT_SRS_FILE"
-}
-
-echo "Starting merge process..."
+# --- 步骤 3: 运行主合并 ---
+echo "--- 步骤 3: 正在运行主合并... ---"
 merge_group "ads" "${ads_urls[@]}"
 merge_group "games-cn" "${games_cn_urls[@]}"
 merge_group "games-noncn" "${games_noncn_urls[@]}"
@@ -1194,44 +1356,36 @@ merge_group "network-noncn" "${network_noncn_urls[@]}"
 merge_group "cdn" "${cdn_urls[@]}"
 merge_group "hkmotw" "${hkmotw_urls[@]}"
 merge_group "private" "${private_urls[@]}"
+echo "--- 步骤 3: 主合并完成 ---"
 
-# 清理旧的备份文件（保留最近3个）
-cleanup_old_backups() {
-    echo "Cleaning up old backup files..."
-    find srs/json -name "*.bak.*" -type f | sort -r | tail -n +4 | xargs rm -f 2>/dev/null || true
-    # 清理临时文件
-    rm -f temp/ip_cidr_*.json temp/optimize_*.jq temp/*.temp temp/*.fixed temp/*.tmp
-}
+
+# --- 步骤 4: 运行 Python 合并后处理 (规范化, cn/!cn 对比) ---
+echo "--- 步骤 4: 正在运行 [Python 步骤 2] (合并后处理) ---"
+"$PYTHON_SCRIPT_PATH" --step step2
+echo "--- 步骤 4: [Python 步骤 2] 完成 ---"
+
+
+# --- 步骤 5: 编译所有 SRS 文件 ---
+# (已移至单独的函数 compile_all_srs)
+compile_all_srs
+
+
+# --- 步骤 6: 清理旧备份 ---
+# (已移至单独的函数 cleanup_old_backups)
 cleanup_old_backups
 
-# 添加文件大小统计函数
-print_size_stats() {
-  echo "=== File Size Statistics ==="
-  for json_file in srs/json/*.json; do
-    if [ -f "$json_file" ] && [[ "$json_file" != *.bak.* ]]; then
-      local size=$(stat -c %s "$json_file" 2>/dev/null || echo 0)
-      local name=$(basename "$json_file")
-      printf " %-40s: %10d bytes\n" "$name" "$size"
-    fi
-  done
-  echo "=== SRS File Statistics ==="
-  for srs_file in srs/*.srs; do
-    if [ -f "$srs_file" ]; then
-      local size=$(stat -c %s "$srs_file" 2>/dev/null || echo 0)
-      local name=$(basename "$srs_file")
-      printf " %-40s: %10d bytes\n" "$name" "$size"
-    fi
-  done
-}
 
+# --- 结束 ---
 echo "All groups processed successfully!"
-echo "JSON files are in: srs/json/"
-echo "SRS files are in: srs/"
-echo "Common parts are in: srs/json/same/"
-print_size_stats
+echo "Source JSON files are in: $SOURCE_DIR/"
+echo "Subset JSON files are in: $SUBSET_DIR/"
+echo "Common JSON files are in: $COMMON_DIR/"
+echo "Compiled SRS files are in: $SRS_DIR/"
 
+# --- Git 提交 (注释掉了，按需启用) ---
+# echo "Committing changes..."
 # git config --global user.name "GitHub Actions"
 # git config --global user.email "actions@github.com"
-# git add srs/*.srs srs/json/*.json srs/json/same/*.json
-# git commit -m "Daily merge update: $(date +%Y-%m-%d)" || echo "No changes to commit"
+# git add "${SRS_DIR}/"*.srs "${SOURCE_DIR}/"*.json "${COMMON_DIR}/"*.json
+# git commit -m "Daily rule update: $(date -u +%Y-%m-%dT%H%M%SZ)" || echo "No changes to commit"
 # git push origin main

@@ -1,4 +1,4 @@
-# manual
+# 手动整理
     "https://dns.icoa.cn/tracker/",
     "https://torrends.to/torrent-tracker-list",
     "https://www.torrenttrackerlist.com/torrent-tracker-list",
@@ -9,10 +9,10 @@
     "https://cf.trackerslist.com/http.txt",
     "https://cf.trackerslist.com/nohttp.txt",
     "https://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
-    "https://newtrackon.com/api/all",
-    "https://newtrackon.com/api/live",
     "https://newtrackon.com/api/10",
+    "https://newtrackon.com/api/all",
     "https://newtrackon.com/api/http",
+    "https://newtrackon.com/api/live",
     "https://newtrackon.com/api/stable",
     "https://newtrackon.com/api/udp",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt",
@@ -29,6 +29,7 @@
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_http.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_https.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_i2p.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ip.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_udp.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ws.txt",
@@ -38,4 +39,3 @@
     "https://trackerslist.com/all.txt",
     "https://trackerslist.com/best.txt",
     "https://trackerslist.com/http.txt",
-    
