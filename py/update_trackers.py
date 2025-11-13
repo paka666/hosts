@@ -7,7 +7,7 @@ import time
 import glob
 import shutil
 
-# [span_0](start_span)List of URLs[span_0](end_span)
+# List of URLs
 urls = [
     "http://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
     "https://cf.trackerslist.com/all.txt",
@@ -26,7 +26,7 @@ urls = [
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_https.txt",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_ip.txt",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_udp.txt",
-    [span_1](start_span)"https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_ws.txt",[span_1](end_span)
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_ws.txt",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_bad.txt",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_best.txt",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_best_ip.txt",
@@ -54,7 +54,7 @@ contents = []
 for url in urls:
     try:
         r = requests.get(url, timeout=10)
-        [span_2](start_span)r.raise_for_status()[span_2](end_span)
+        r.raise_for_status()
         contents.append(r.text)
     except Exception as e:
         print(f"Failed to fetch {url}: {e}")
@@ -80,12 +80,12 @@ for line in lines:
     # 去# ! ;注释
     line = re.split(r"[#!;]", line)[0].strip()
     if not line:
-        [span_3](start_span)continue[span_3](end_span)
+        continue
     # 去, ; 空白字符(包括行首尾 行内)
-    [span_4](start_span)parts = [p.strip() for p in re.split(r"[ ,;]", line) if p.strip()][span_4](end_span)
+    parts = [p.strip() for p in re.split(r"[ ,;]", line) if p.strip()]
     cleaned.extend(parts)
 
-# [span_5](start_span)定义协议和修复 (包括了带//和不带/的)[span_5](end_span)
+# 定义协议和修复 (包括了带//和不带/的)
 protocols_map = {
     "http:/": "http://",
     "https:/": "https://",
@@ -110,7 +110,7 @@ for i in range(len(cleaned)):
 
 # --- 3. 步骤 A (扩展) ---
 
-# [span_6](start_span)A (新): 处理 udp://http://wss://... 这种粘连协议头 [cite: 42-43]
+# A (新): 处理 udp://http://wss://... 这种粘连协议头
 new_cleaned = []
 for t in cleaned:
     # 匹配一个或多个协议头
@@ -127,7 +127,7 @@ for t in cleaned:
         new_cleaned.append(t)
 cleaned = new_cleaned
 
-# [cite_start]A (原): 拆分 wss://...http:/... 这种粘连tracker [cite: 43-46]
+# A (原): 拆分 wss://...http:/... 这种粘连tracker
 new_cleaned = []
 for t in cleaned:
     current = t
@@ -157,13 +157,13 @@ cleaned = [t for t in new_cleaned if t] # 去除拆分产生的空行
 
 # --- 4. 步骤 C (部分) 和 TLD 准备 ---
 
-# [cite_start]C: 修复 //announce 和 /announce+... 等结尾 [cite: 46-47]
+# C: 修复 //announce 和 /announce+... 等结尾
 for i in range(len(cleaned)):
     cleaned[i] = cleaned[i].replace("//announce", "/announce")
     # 修复 /announce+108, /announce+, /announce"
     cleaned[i] = re.sub(r"/announce(\+\d*|\"|\+)?$", "/announce", cleaned[i])
 
-# [cite_start]获取 TLD 列表, 带后备 [cite: 47-48]
+# 获取 TLD 列表, 带后备
 try:
     tld_text = requests.get("https://data.iana.org/TLD/tlds-alpha-by-domain.txt", timeout=10).text
     tlds = {line.lower() for line in tld_text.splitlines() if line and not line.startswith("#")}
@@ -179,7 +179,7 @@ except Exception:
 tlds.add("i2p") # 添加 i2p
 
 def is_valid_host(host, tlds_set):
-    [cite_start]"""检查是否为有效的 IP 或 TLD 域名""" [cite: 48-49]
+    """检查是否为有效的 IP 或 TLD 域名"""
     if not host:
         return False
     try:
@@ -212,7 +212,7 @@ for t in cleaned:
         host = parsed.hostname
         port = parsed.port
 
-        # [cite_start]C: 修复 [domain] 或 [domain:port] [cite: 50-51]
+        # C: 修复 [domain] 或 [domain:port]
         if netloc.startswith("[") and netloc.endswith("]"):
             inside = netloc[1:-1]
             try:
@@ -226,7 +226,7 @@ for t in cleaned:
                 host = parsed.hostname # 重新解析
                 port = parsed.port
 
-        # [cite_start]D: 修复粘连的端口 (如 .net80, .i2p6969) [cite: 52-54]
+        # D: 修复粘连的端口 (如 .net80, .i2p6969)
         if port is None:
             # 仅在 urlparse 没找到端口时检查
             # 使用修复 C 步骤后的 netloc
@@ -243,7 +243,7 @@ for t in cleaned:
                 except ValueError:
                     pass
 
-        # [cite_start]C: 验证主机 (过滤 ipv4announce 和处理 unbracketed-ipv6)[span_6](end_span)
+        # C: 验证主机 (过滤 ipv4announce 和处理 unbracketed-ipv6)
         if host is None:
             # host 为 None 可能是无方括号的IPv6, 尝试修复
             if ":" in netloc:
@@ -275,13 +275,13 @@ cleaned = valid_trackers
 
 # --- 6. 步骤 B, E, F ---
 
-# [span_7](start_span)B: 检查 Suffix, 不匹配则补 /announce[span_7](end_span)
+# B: 检查 Suffix, 不匹配则补 /announce
 suffix_pattern = re.compile(r"(\.i2p(:\d+)?/a|/announce(\.php)?(\?(passkey|authkey)=[^?&]+(&[^?&]+)*)?|/announce(\.php)?/[^/]+)$", re.IGNORECASE)
 for i in range(len(cleaned)):
     if not suffix_pattern.search(cleaned[i]):
         cleaned[i] += "/announce"
 
-# [span_8](start_span)E: 移除默认端口 (http:80, https:443, ws:80, wss:443) [cite: 55-56]
+# E: 移除默认端口 (http:80, https:443, ws:80, wss:443)
 default_ports = {
     "http": 80,
     "https": 443,
@@ -312,7 +312,7 @@ cleaned = new_cleaned
 # 合并去重排序
 unique = sorted(list(set(cleaned)))
 
-# [cite_start]F: 备份和更新, 保留最近3次备份 [cite: 56-57]
+# F: 备份和更新, 保留最近3次备份
 dir_path = "trackers"
 os.makedirs(dir_path, exist_ok=True)
 local = os.path.join(dir_path, "trackers-back.txt")
@@ -331,7 +331,7 @@ try:
     backups = glob.glob(os.path.join(dir_path, "*-trackers-back.txt"))
     backups.sort(key=os.path.getmtime, reverse=True)
     if len(backups) > 3:
-        [cite_start]for old_backup in backups[3:]:[span_8](end_span)
+        for old_backup in backups[3:]:
             os.remove(old_backup)
             print(f"Removed old backup: {old_backup}")
 
