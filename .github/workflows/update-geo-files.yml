@@ -1,4 +1,4 @@
-name: Update Geo Files
+name: Update geo files daily
 
 on:
   push:

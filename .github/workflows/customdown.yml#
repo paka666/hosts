@@ -1,4 +1,4 @@
-name: Update Custom Files
+name: Download custom files
 
 on:
   push:

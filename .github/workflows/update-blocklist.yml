@@ -1,4 +1,4 @@
-name: Update Blocklist Daily
+name: Update blocklist daily
 
 on:
   push:
