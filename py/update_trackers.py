@@ -49,13 +49,14 @@ urls = [
 
 # --- 1. 获取数据 ---
 
-# Fetch contents from URLs
+print("Fetching trackers from URLs...")
 contents = []
 for url in urls:
     try:
         r = requests.get(url, timeout=10)
         r.raise_for_status()
         contents.append(r.text)
+        # print(f"Successfully fetched {url}")
     except Exception as e:
         print(f"Failed to fetch {url}: {e}")
 
@@ -65,6 +66,7 @@ if os.path.exists(local_file):
     try:
         with open(local_file, "r", encoding="utf-8") as f:
             contents.append(f.read())
+        print(f"Successfully read local file: {local_file}")
     except Exception as e:
         print(f"Failed to read {local_file}: {e}")
 
@@ -73,7 +75,7 @@ all_text = "\n".join(contents)
 
 # --- 2. 初始清理 ---
 
-# Split into lines and clean
+print("Cleaning trackers...")
 lines = all_text.splitlines()
 cleaned = []
 for line in lines:
@@ -111,6 +113,7 @@ for i in range(len(cleaned)):
 # --- 3. 步骤 A (扩展) ---
 
 # A (新): 处理 udp://http://wss://... 这种粘连协议头
+print("Processing Step A (concatenated protocols)...")
 new_cleaned = []
 for t in cleaned:
     # 匹配一个或多个协议头
@@ -155,7 +158,9 @@ for t in cleaned:
             break
 cleaned = [t for t in new_cleaned if t] # 去除拆分产生的空行
 
-# --- 4. 步骤 C (部分) 和 TLD 准备 ---
+# --- 4. 步骤 C (部分) 和 新的主机验证 ---
+
+print("Processing Step C (endings) and D (host/port fix)...")
 
 # C: 修复 //announce 和 /announce+... 等结尾
 for i in range(len(cleaned)):
@@ -163,25 +168,15 @@ for i in range(len(cleaned)):
     # 修复 /announce+108, /announce+, /announce"
     cleaned[i] = re.sub(r"/announce(\+\d*|\"|\+)?$", "/announce", cleaned[i])
 
-# 获取 TLD 列表, 带后备
-try:
-    tld_text = requests.get("https://data.iana.org/TLD/tlds-alpha-by-domain.txt", timeout=10).text
-    tlds = {line.lower() for line in tld_text.splitlines() if line and not line.startswith("#")}
-except Exception:
-    print("Failed to fetch TLD list, using fallback common TLDs.")
-    tlds = set([
-        'com', 'net', 'org', 'info', 'biz', 'uk', 'de', 'eu', 'ru', 'br', 'in', 'cn', 'fr', 'it', 'es', 'nl', 
-        'pl', 'ca', 'jp', 'au', 'se', 'ch', 'no', 'dk', 'at', 'be', 'mx', 'tr', 'fi', 'pt', 'cz', 'hu', 'ar', 
-        'gr', 'cl', 'ie', 'nz', 'za', 'ir', 'ua', 'tw', 'ro', 'th', 'il', 'ph', 'sk', 'hk', 'sg', 'my', 'lt', 
-        'lv', 'ee', 'si', 'hr', 'rs', 'md', 'by', 'bg', 'mk', 'cy', 'pk', 'id', 'us', 'cc', 'io', 'me', 'to', 
-        'pro', 'tv', 'ws', 'mobi', 'asia', 'name', 'today', 'club', 'top', 'xyz'
-    ])
-tlds.add("i2p") # 添加 i2p
-
-def is_valid_host(host, tlds_set):
-    """检查是否为有效的 IP 或 TLD 域名"""
+def is_valid_host(host):
+    """
+    检查是否为有效的 IP、localhost 或带TLD的域名。
+    这会过滤掉 "ipv4announce" 这样的无效主机。
+    """
     if not host:
         return False
+    if host.lower() == 'localhost':
+        return True
     try:
         IPv4Address(host)
         return True
@@ -192,10 +187,13 @@ def is_valid_host(host, tlds_set):
         return True
     except AddressValueError:
         pass
+    
+    # 检查TLD-less名称 (如 'ipv4announce')
+    # 我们假设任何带点的(.)主机都是有效的 (如 'tracker.com', 'tracker.local', 'tracker.i2p')
     if "." in host:
-        tld = host.rsplit(".", 1)[-1].lower()
-        if tld in tlds_set:
-            return True
+        return True
+    
+    # No dot, not an IP, not localhost. Filter it.
     return False
 
 # --- 5. 步骤 C (剩余) 和 D (Bug修复) ---
@@ -208,66 +206,58 @@ for t in cleaned:
         if not parsed.scheme or not parsed.netloc:
             continue
 
-        netloc = parsed.netloc
         host = parsed.hostname
         port = parsed.port
 
         # C: 修复 [domain] 或 [domain:port]
-        if netloc.startswith("[") and netloc.endswith("]"):
-            inside = netloc[1:-1]
+        # urlparse("wss://[tracker.com]:8080/a") -> hostname='[tracker.com]', port=8080
+        if host and host.startswith("[") and host.endswith("]"):
+            inside_host = host[1:-1] # e.g., "2001:db8::1" or "tracker.com"
             try:
-                # 检查方括号内是否为合法IPv6
-                test_host = inside.rsplit("]:", 1)[0] if "]:" in netloc else inside
-                IPv6Address(test_host)
-                # 是合法IPv6, host 和 port 已经是正确的
+                IPv6Address(inside_host)
+                # 是合法的IPv6, 保留方括号, host/port正确, 无需操作
             except AddressValueError:
-                # 不是合法IPv6, 视为 [domain] or [domain:port], 移除[]
-                parsed = parsed._replace(netloc=inside)
-                host = parsed.hostname # 重新解析
+                # 不是IPv6, 认为是 [domain], 移除 []
+                host = inside_host # host 'tracker.com'
+                # 重建 netloc
+                new_netloc = host
+                if port:
+                    new_netloc = f"{host}:{port}"
+                if parsed.username:
+                    auth = parsed.username
+                    if parsed.password:
+                        auth += ":" + parsed.password
+                    new_netloc = f"{auth}@{new_netloc}"
+                
+                parsed = parsed._replace(netloc=new_netloc)
+                # 重新解析
+                host = parsed.hostname
                 port = parsed.port
 
         # D: 修复粘连的端口 (如 .net80, .i2p6969)
         if port is None:
             # 仅在 urlparse 没找到端口时检查
-            # 使用修复 C 步骤后的 netloc
             match = re.match(r"^(.+?)(\d+)$", parsed.netloc)
             if match:
                 base = match.group(1)
                 port_str = match.group(2)
                 try:
-                    if 1 <= int(port_str) <= 65535 and is_valid_host(base, tlds):
+                    # 使用新的 is_valid_host 检查
+                    if 1 <= int(port_str) <= 65535 and is_valid_host(base):
                         new_netloc = base + ":" + port_str
                         parsed = parsed._replace(netloc=new_netloc)
                         host = parsed.hostname # 重新解析
-                        port = parsed.port
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
-
-        # C: 验证主机 (过滤 ipv4announce 和处理 unbracketed-ipv6)
-        if host is None:
-            # host 为 None 可能是无方括号的IPv6, 尝试修复
-            if ":" in netloc:
-                try:
-                    IPv6Address(netloc) # e.g., 2001:db8::1
-                    host = netloc
-                except AddressValueError:
-                    try:
-                        # e.g., 2001:db8::1:8080
-                        h, p = netloc.rsplit(":", 1)
-                        IPv6Address(h)
-                        host = h
-                    except (ValueError, AddressValueError):
-                        continue # 无法解析, 丢弃
-            else:
-                continue # host 为 None 且不含 ':', 丢弃
         
-        # 最终主机有效性检查
-        if not is_valid_host(host, tlds):
+        # 最终主机有效性检查 (过滤 ipv4announce)
+        if not is_valid_host(host):
+            # print(f"Filtered invalid host: {host}")
             continue
 
         valid_trackers.append(parsed.geturl())
 
-    except Exception:
+    except Exception as e:
         # print(f"Error processing tracker {t}: {e}") # 可选: 开启以调试
         continue # 保证单个tracker的错误不影响全局
 
@@ -276,12 +266,14 @@ cleaned = valid_trackers
 # --- 6. 步骤 B, E, F ---
 
 # B: 检查 Suffix, 不匹配则补 /announce
+print("Processing Step B (suffix)...")
 suffix_pattern = re.compile(r"(\.i2p(:\d+)?/a|/announce(\.php)?(\?(passkey|authkey)=[^?&]+(&[^?&]+)*)?|/announce(\.php)?/[^/]+)$", re.IGNORECASE)
 for i in range(len(cleaned)):
     if not suffix_pattern.search(cleaned[i]):
         cleaned[i] += "/announce"
 
 # E: 移除默认端口 (http:80, https:443, ws:80, wss:443)
+print("Processing Step E (default ports)...")
 default_ports = {
     "http": 80,
     "https": 443,
@@ -302,13 +294,14 @@ for t in cleaned:
                 new_netloc = auth + "@" + new_netloc
             t = parsed._replace(netloc=new_netloc).geturl()
         new_cleaned.append(t)
-    except Exception:
+    except Exception as e:
         # print(f"Error removing default port from {t}: {e}")
         continue # 丢弃端口处理失败的
 cleaned = new_cleaned
 
 # --- 7. 最终处理和备份 ---
 
+print("Deduplicating, sorting, and writing file...")
 # 合并去重排序
 unique = sorted(list(set(cleaned)))
 
