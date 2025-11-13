@@ -1,0 +1,2 @@
+http://announce.partis.si/announce
+http://announce.torrentsmd.com:6969/announce
