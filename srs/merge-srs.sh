@@ -342,9 +342,14 @@ def find_and_remove_dupes(file_cn_path: Path, file_noncn_path: Path, common_path
         
         for key in ip_keys:
              if key in all_keys_data:
-                # IP 列表在写入前不需要再次排序，它们在 merge_cidrs 阶段已经排序
-                # 但如果它们是简单地从 set 转换而来（如此处），则需要排序
-                ip_rule_obj[key] = sorted(all_keys_data[key])
+                try:
+                    ip_nets = [ipaddress.ip_network(ip_str, strict=False) for ip_str in all_keys_data[key] if ip_str]
+                    v4_nets = sorted([n for n in ip_nets if n.version == 4], key=lambda n: (n.network_address, n.prefixlen))
+                    v6_nets = sorted([n for n in ip_nets if n.version == 6], key=lambda n: (n.network_address, n.prefixlen))
+                    ip_rule_obj[key] = [str(n) for n in v4_nets] + [str(n) for n in v6_nets]
+                except ValueError as e:
+                    print(f"    [警告] 在 write_rules_from_all_keys 中排序 IP 时出错: {e}", file=sys.stderr)
+                    ip_rule_obj[key] = sorted(all_keys_data[key])
 
         new_rules = []
         if domain_rule_obj:
@@ -1338,7 +1343,7 @@ hkmotw_urls=(
 )
 private_urls=(
   "${SOURCE_DIR}/private.json"
-  "${SOURCE_DIR}/geoip-private.json"
+  "${SUBSET_DIR}/geoip-private-manual.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geoip/geoip-private.json"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-private.json"
 )

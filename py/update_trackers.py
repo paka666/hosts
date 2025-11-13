@@ -1,22 +1,24 @@
-#!/usr/bin/env python3
-import os
 import requests
-import re
 from urllib.parse import urlparse
-from datetime import datetime
+import re
+from ipaddress import IPv6Address, IPv4Address, AddressValueError
+import os
+import time
+import glob
+import shutil
 
-# Trackers 下载源
-TRACKERS_URLS = [
+# List of URLs
+urls = [
     "http://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
     "https://cf.trackerslist.com/all.txt",
     "https://cf.trackerslist.com/best.txt",
     "https://cf.trackerslist.com/http.txt",
     "https://cf.trackerslist.com/nohttp.txt",
     "https://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
-    "https://newtrackon.com/api/all",
-    "https://newtrackon.com/api/live",
     "https://newtrackon.com/api/10",
+    "https://newtrackon.com/api/all",
     "https://newtrackon.com/api/http",
+    "https://newtrackon.com/api/live",
     "https://newtrackon.com/api/stable",
     "https://newtrackon.com/api/udp",
     "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt",
@@ -33,6 +35,7 @@ TRACKERS_URLS = [
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_http.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_https.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_i2p.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ip.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_udp.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ws.txt",
@@ -44,154 +47,204 @@ TRACKERS_URLS = [
     "https://trackerslist.com/http.txt"
 ]
 
-# 输出文件路径
-OUTPUT_FILE = "trackers/trackers-back.txt"
-BACKUP_FILE = "trackers/trackers-back.bak"
-
-def is_valid_tracker(tracker):
-    """验证 tracker 地址是否有效"""
-    if not tracker or not tracker.strip():
-        return False
-    
-    tracker = tracker.strip()
-    
-    # 过滤注释和空行
-    if tracker.startswith('#') or tracker == '':
-        return False
-    
-    # 验证 URL 格式
+# Fetch contents from URLs
+contents = []
+for url in urls:
     try:
-        parsed = urlparse(tracker)
-        if not parsed.scheme or not parsed.netloc:
-            return False
-        
-        # 支持的协议
-        valid_schemes = ['udp', 'http', 'https', 'wss', 'ws']
-        if parsed.scheme not in valid_schemes:
-            return False
-            
-        return True
-    except:
-        return False
-
-def download_trackers(url):
-    """从 URL 下载 trackers"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.text
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        contents.append(r.text)
     except Exception as e:
-        print(f"下载失败 {url}: {e}")
-        return ""
+        print(f"Failed to fetch {url}: {e}")
 
-def parse_trackers_content(content):
-    """解析 trackers 内容"""
-    trackers = set()
-    
-    if not content:
-        return trackers
-    
-    # 按行分割
-    lines = content.split('\n')
-    
-    for line in lines:
-        line = line.strip()
-        
-        # 处理逗号分隔的 trackers
-        if ',' in line and not line.startswith('#'):
-            for tracker in line.split(','):
-                tracker = tracker.strip()
-                if is_valid_tracker(tracker):
-                    trackers.add(tracker)
-        # 处理单行 tracker
-        elif is_valid_tracker(line):
-            trackers.add(line)
-    
-    return trackers
+# Read local file if exists
+local_file = "trackers/trackers-back.txt"
+if os.path.exists(local_file):
+    with open(local_file, "r", encoding="utf-8") as f:
+        contents.append(f.read())
 
-def load_existing_trackers():
-    """加载现有的 trackers"""
-    existing_trackers = set()
-    
-    if os.path.exists(OUTPUT_FILE):
+# Combine all contents
+all_text = "\n".join(contents)
+
+# Split into lines and clean
+lines = all_text.splitlines()
+cleaned = []
+for line in lines:
+    # Remove comments
+    line = re.split(r"[#!;]", line)[0].strip()
+    if not line:
+        continue
+    # Split by commas, semicolons, spaces and remove blanks
+    parts = [p.strip() for p in re.split(r"[ ,;]", line) if p.strip()]
+    cleaned.extend(parts)
+
+# Define protocols and fixes
+protocols = ["http:/", "https:/", "udp:/", "ws:/", "wss:/"]
+fixed_protos = {
+    "http:/": "http://",
+    "https:/": "https://",
+    "udp:/": "udp://",
+    "ws:/": "ws://",
+    "wss:/": "wss://",
+}
+
+# First fix starting protocols if missing /
+for i in range(len(cleaned)):
+    for proto in protocols:
+        if cleaned[i].startswith(proto):
+            cleaned[i] = fixed_protos[proto] + cleaned[i][len(proto):]
+            break
+
+# A: Split concatenated trackers
+new_cleaned = []
+for t in cleaned:
+    current = t
+    while True:
+        found = False
+        for proto in protocols:
+            pos = current.find(proto, 1)
+            if pos > 0:
+                first = current[:pos]
+                rest = fixed_protos[proto] + current[pos + len(proto):]
+                new_cleaned.append(first)
+                current = rest
+                found = True
+                break
+        if not found:
+            new_cleaned.append(current)
+            break
+cleaned = [t for t in new_cleaned if t]
+
+# C: Fix endings like /announce+108, /announce", //announce
+for i in range(len(cleaned)):
+    cleaned[i] = cleaned[i].replace("//announce", "/announce")
+    cleaned[i] = re.sub(r"/announce(\+\d*|\"| \+)?$", "/announce", cleaned[i])
+
+# Fetch TLD list
+try:
+    tld_text = requests.get("https://data.iana.org/TLD/tlds-alpha-by-domain.txt", timeout=10).text
+    tlds = {line.lower() for line in tld_text.splitlines() if line and not line.startswith("#")}
+except Exception:
+    tlds = set()
+    print("Failed to fetch TLD list, using empty set.")
+tlds.add("i2p")  # Add custom for I2P
+
+def is_valid_host(host, tlds):
+    try:
+        IPv4Address(host)
+        return True
+    except AddressValueError:
+        pass
+    try:
+        IPv6Address(host)
+        return True
+    except AddressValueError:
+        pass
+    if "." in host:
+        tld = host.rsplit(".", 1)[-1].lower()
+        return tld in tlds
+    return False
+
+# C & D: Fix [] , concatenated ports, remove invalid no TLD
+valid_trackers = []
+for t in cleaned:
+    parsed = urlparse(t)
+    if not parsed.scheme or not parsed.netloc:
+        continue
+
+    # C: Fix [] if not valid IPv6
+    netloc = parsed.netloc
+    port_part = None
+    if ":" in netloc:
+        addr_part, port_part = netloc.rsplit(":", 1)
+    else:
+        addr_part = netloc
+    if addr_part.startswith("[") and addr_part.endswith("]"):
+        inside = addr_part[1:-1]
         try:
-            with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if is_valid_tracker(line):
-                        existing_trackers.add(line)
-            print(f"从 {OUTPUT_FILE} 加载了 {len(existing_trackers)} 个现有 tracker")
-        except Exception as e:
-            print(f"读取现有 trackers 失败: {e}")
-    
-    return existing_trackers
+            IPv6Address(inside)
+            # valid, keep
+        except AddressValueError:
+            # remove []
+            new_addr = inside
+            new_netloc = new_addr
+            if port_part:
+                new_netloc += ":" + port_part
+            parsed = parsed._replace(netloc=new_netloc)
 
-def backup_existing_file():
-    """备份现有文件"""
-    if os.path.exists(OUTPUT_FILE):
-        import shutil
-        shutil.copy2(OUTPUT_FILE, BACKUP_FILE)
-        print(f"已备份现有文件到 {BACKUP_FILE}")
+    # D: Fix concatenated port
+    if parsed.port is None:
+        netloc = parsed.netloc
+        match = re.match(r"^(.+?)(\d+)$", netloc)
+        if match:
+            base = match.group(1)
+            port_str = match.group(2)
+            try:
+                port = int(port_str)
+                if 1 <= port <= 65535 and is_valid_host(base, tlds):
+                    new_netloc = base + ":" + port_str
+                    parsed = parsed._replace(netloc=new_netloc)
+            except ValueError:
+                pass
 
-def save_trackers(trackers):
-    """保存 trackers 到文件"""
-    # 确保目录存在
-    os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-    
-    # 排序 trackers
-    sorted_trackers = sorted(trackers)
-    
-    # 写入文件
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        # 写入文件头
-        f.write(f"# Trackers 列表\n")
-        f.write(f"# 更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"# 总数: {len(sorted_trackers)}\n")
-        f.write(f"# 来源: {', '.join(TRACKERS_URLS[:3])}...\n")
-        f.write("# ==============================================\n\n")
-        
-        # 写入 trackers
-        for tracker in sorted_trackers:
-            f.write(f"{tracker}\n")
-    
-    print(f"成功保存 {len(sorted_trackers)} 个 trackers 到 {OUTPUT_FILE}")
+    # Check valid host
+    host = parsed.hostname
+    if host is None:
+        continue
+    if not is_valid_host(host, tlds):
+        continue
 
-def main():
-    print("开始更新 trackers...")
-    
-    # 备份现有文件
-    backup_existing_file()
-    
-    # 加载现有 trackers
-    all_trackers = load_existing_trackers()
-    initial_count = len(all_trackers)
-    
-    # 从各个 URL 下载并合并 trackers
-    for i, url in enumerate(TRACKERS_URLS, 1):
-        print(f"[{i}/{len(TRACKERS_URLS)}] 正在处理: {url}")
-        
-        content = download_trackers(url)
-        if content:
-            new_trackers = parse_trackers_content(content)
-            before_count = len(all_trackers)
-            all_trackers.update(new_trackers)
-            added_count = len(all_trackers) - before_count
-            print(f"  从该源添加了 {added_count} 个新 tracker")
-        else:
-            print(f"  跳过该源（下载失败）")
-    
-    # 统计信息
-    total_added = len(all_trackers) - initial_count
-    print(f"\n更新完成!")
-    print(f"初始数量: {initial_count}")
-    print(f"新增数量: {total_added}")
-    print(f"最终总数: {len(all_trackers)}")
-    
-    # 保存结果
-    save_trackers(all_trackers)
+    t = parsed.geturl()
+    valid_trackers.append(t)
 
-if __name__ == "__main__":
-    main()
+cleaned = valid_trackers
+
+# B: Append /announce if not matching suffix
+suffix_pattern = re.compile(r"(\.i2p(:\d+)?/a|/announce(\.php)?(\?(passkey|authkey)=[^?&]+(&[^?&]+)*)?|announce(\.php)?/[^/]+)$")
+for i in range(len(cleaned)):
+    if not suffix_pattern.search(cleaned[i]):
+        cleaned[i] += "/announce"
+
+# E: Remove default ports (precise, not for 8080 etc.)
+default_ports = {
+    "http": 80,
+    "https": 443,
+    "ws": 80,
+    "wss": 443,
+}
+new_cleaned = []
+for t in cleaned:
+    parsed = urlparse(t)
+    if parsed.scheme in default_ports and parsed.port == default_ports[parsed.scheme]:
+        new_netloc = parsed.hostname
+        if parsed.username:
+            auth = parsed.username
+            if parsed.password:
+                auth += ":" + parsed.password
+            new_netloc = auth + "@" + new_netloc
+        t = parsed._replace(netloc=new_netloc).geturl()
+    new_cleaned.append(t)
+cleaned = new_cleaned
+
+# Dedup and sort
+unique = sorted(set(cleaned))
+
+# F: Backup and update local, keep last 3 backups
+dir_path = "trackers"
+os.makedirs(dir_path, exist_ok=True)
+local = os.path.join(dir_path, "trackers-back.txt")
+if os.path.exists(local):
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    backup = os.path.join(dir_path, f"{timestamp}-trackers-back.txt")
+    shutil.copy(local, backup)
+
+with open(local, "w", encoding="utf-8") as f:
+    f.write("\n".join(unique) + "\n")
+
+# Clean old backups
+backups = glob.glob(os.path.join(dir_path, "*-trackers-back.txt"))
+backups.sort(key=os.path.getmtime, reverse=True)
+for old_backup in backups[3:]:
+    os.remove(old_backup)
+
+print("Processing complete. Updated trackers-back.txt")

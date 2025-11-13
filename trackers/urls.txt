@@ -1,7 +1,7 @@
-# 手动整理
+# manual
     "https://dns.icoa.cn/tracker/",
     "https://torrends.to/torrent-tracker-list",
-    "https://www.torrenttrackerlist.com/torrent-tracker-list",
+    "https://www.torrenttrackerlist.com/torrent-tracker-list"
 # auto
     "http://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
     "https://cf.trackerslist.com/all.txt",
@@ -38,4 +38,4 @@
     "https://torrends.to/torrent-tracker-list/?download=latest",
     "https://trackerslist.com/all.txt",
     "https://trackerslist.com/best.txt",
-    "https://trackerslist.com/http.txt",
+    "https://trackerslist.com/http.txt"
