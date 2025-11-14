@@ -1,7 +1,7 @@
 import requests
 from urllib.parse import urlparse
 import re
-from ipaddress import IPv6Address, AddressValueError
+from ipaddress import IPv6Address, IPv4Address, AddressValueError
 import os
 import time
 import glob
