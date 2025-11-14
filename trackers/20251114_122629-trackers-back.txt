@@ -1,3 +1,4 @@
+wss://tracker.dnlab.net/announce
 wss://tracker.files.fm:7073/announce
 wss://tracker.ghostchu-services.top/announce
 wss://tracker.magnetoo.io/announce
