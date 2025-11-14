@@ -1,3 +1,0 @@
-wss://tracker.magnetoo.io/announce
-wss://tracker.openwebtorrent.com/announce
-wss://tracker.webtorrent.dev/announce
