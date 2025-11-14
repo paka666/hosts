@@ -55,13 +55,12 @@ URL_SOURCES = [
 TRACKERS_DIR = "trackers"
 LOCAL_FILE = os.path.join(TRACKERS_DIR, "trackers-back.txt")
 ERROR_FILE = os.path.join(TRACKERS_DIR, "error.txt")
-BACKUP_KEEP = 3  # 保留最近3次备份
+ARIA2_FILE = os.path.join(TRACKERS_DIR, "aria2c-trackers.txt") # 新增：Aria2c 文件
+BACKUP_KEEP = 3  # 保留最近三次备份
 
 # 步骤2: 最后的正则 (不区分大小写)
-# 注意：这是一个非常长的单行字符串
 MAIN_REGEX_STR = r'^(?:(?:http|https|udp|ws|wss)://)(?:(?:(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}))(?::(?:[1-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/(?:[^/]+/)*announce(?:\.php)?(?:\?(?:passkey|authkey)=[^&#]+|/[^/&#]+)?|(?:(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.i2p)(?::(?:[1-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/(?:[^/]+/)*a|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})(?::(?:[1-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/(?:[^/]+/)*announce(?:\.php)?(?:\?(?:passkey|authkey)=[^&#]+|/[^/&#]+)?|\[((?:(?:[0-9A-Fa-f]{1,4}:){7}(?:[0-9A-Fa-f]{1,4}|:))|(?:(?:[0-9A-Fa-f]{1,4}:){6}(?::[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?:(?:[0-9A-Fa-f]{1,4}:){5}(?:(?::[0-9A-Fa-f]{1,4}){1,2}|:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?:(?:[0-9A-Fa-f]{1,4}:){4}(?:(?::[0-9A-Fa-f]{1,4}){1,3}|(?::[0-9A-Fa-f]{1,4})?:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?:(?:[0-9A-Fa-f]{1,4}:){3}(?:(?::[0-9A-Fa-f]{1,4}){1,4}|(?::[0-9A-Fa-f]{1,4}){0,2}:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?:(?:[0-9A-Fa-f]{1,4}:){2}(?:(?::[0-9A-Fa-f]{1,4}){1,5}|(?::[0-9A-Fa-f]{1,4}){0,3}:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?:(?:[0-9A-Fa-f]{1,4}:){1}(?:(?::[0-9A-Fa-f]{1,4}){1,6}|(?::[0-9A-Fa-f]{1,4}){0,4}:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(?::(?:(?::[0-9A-Fa-f]{1,4}){1,7}|(?::[0-9A-Fa-f]{1,4}){0,5}:(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:)))\](?::(?:[1-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/(?:[^/]+/)*announce(?:\.php)?(?:\?(?:passkey|authkey)=[^&#]+|/[^/&#]+)?)$'
 
-# 编译主正则
 try:
     MAIN_REGEX = re.compile(MAIN_REGEX_STR, re.IGNORECASE)
 except re.error as e:
@@ -92,12 +91,13 @@ def read_file(filepath):
         print(f"读取文件失败 {filepath}: {e}")
         return ""
 
-def write_file(filepath, content_set):
-    """将set内容排序后写入文件，每行一个"""
+def write_file(filepath, content_list):
+    """将(已排序的)列表内容写入文件，每行一个"""
+    # 假设 content_list 已经是一个排序好的列表
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
-            f.write("\n".join(sorted(list(content_set))))
-        print(f"已写入 {len(content_set)} 条到 {filepath}")
+            f.write("\n".join(content_list))
+        print(f"已写入 {len(content_list)} 条到 {filepath}")
     except Exception as e:
         print(f"写入文件失败 {filepath}: {e}")
 
@@ -109,8 +109,13 @@ def manage_backups(file_to_backup, backup_dir, keep=3):
 
     # 1. 创建备份
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    base_name = os.path.basename(file_to_backup)
-    backup_name = f"{timestamp}_{base_name}.bak"
+    
+    # --- 步骤 1: 修改备份文件名 ---
+    base_name = os.path.basename(file_to_backup) # e.g., "trackers-back.txt"
+    base_prefix = os.path.splitext(base_name)[0] # e.g., "trackers-back"
+    backup_name = f"{timestamp}-{base_prefix}.bak" # e.g., "20251115-trackers-back.bak"
+    # --- 修改结束 ---
+    
     backup_path = os.path.join(backup_dir, backup_name)
     
     try:
@@ -121,7 +126,10 @@ def manage_backups(file_to_backup, backup_dir, keep=3):
         return
 
     # 2. 清理历史备份
-    backup_pattern = os.path.join(backup_dir, f"*_{base_name}.bak")
+    # --- 步骤 1: 修改匹配模式 ---
+    backup_pattern = os.path.join(backup_dir, f"*-{base_prefix}.bak")
+    # --- 修改结束 ---
+
     existing_backups = glob.glob(backup_pattern)
     
     if len(existing_backups) > keep:
@@ -193,7 +201,6 @@ def process_trackers():
 
     for line in temp2:
         # (c) 首位连接情况, 如 ...announceudp://...
-        # 用换行符分割，后续会按行处理
         lines_c = re.sub(r'(/announce)(?=(?:https?|udp|wss?)://)', r'\1\n', line, flags=re.IGNORECASE).splitlines()
         
         temp_lines_b = []
@@ -222,9 +229,7 @@ def process_trackers():
                 continue
 
             # (a) 协议头:/ 和 //announce
-            # 协议头:/ 改为 协议头://
             line_a = re.sub(r'(https?|udp|wss):/([^/])', r'\1://\2', line_b, flags=re.IGNORECASE)
-            # (非协议头后的) // 改为 /
             line_a = re.sub(r'(?<!:)/{2,}', '/', line_a)
 
             # (d) 不正确的后缀改为announce
@@ -261,20 +266,38 @@ def process_trackers():
         line_h = re.sub(r':(80|443)(?=/)', '', line)
         temp5.add(line_h)
     
+    # 转换为排序后的列表，供后续所有写入操作使用
     sorted_temp5 = sorted(list(temp5))
     print(f"步骤 3 (h): 移除 :80 和 :443 端口完成。最终有效 tracker: {len(sorted_temp5)} 条。")
 
     # (i) 备份本地源，更新，保存错误
-    print("\n--- 步骤 4: 备份与保存 ---")
+    print("\n--- 步骤 4: 备份与保存 (trackers-back 和 error) ---")
     
-    # 备份
+    # 备份 (已更新 manage_backups)
     manage_backups(LOCAL_FILE, TRACKERS_DIR, keep=BACKUP_KEEP)
     
-    # 更新
+    # 更新 (i)
     write_file(LOCAL_FILE, sorted_temp5)
     
-    # 保存错误
+    # 保存错误 (i)
     write_file(ERROR_FILE, sorted(list(temp4)))
+
+    # --- 步骤 2: 新增 Aria2c 文件生成 ---
+    print("\n--- 步骤 5: 生成 Aria2c 格式文件 ---")
+    if sorted_temp5: # 确保列表不为空
+        # 将列表用逗号连接成单行，前面加上 "bt-tracker="
+        aria2_content = f"bt-tracker={','.join(sorted_temp5)}"
+        
+        try:
+            with open(ARIA2_FILE, 'w', encoding='utf-8') as f:
+                f.write(aria2_content)
+            print(f"已写入 Aria2c 格式文件到 {ARIA2_FILE}")
+        except Exception as e:
+            print(f"写入 Aria2c 文件失败 {ARIA2_FILE}: {e}")
+    else:
+        print("temp5 (有效列表) 为空，跳过生成 Aria2c 文件。")
+    # --- 新增结束 ---
+
 
     print("\n--- 脚本执行完毕 ---")
 

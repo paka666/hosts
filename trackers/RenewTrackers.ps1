@@ -1,7 +1,7 @@
 # 配置文件路径和下载链接
 $ConfigFilePath = "aria2.conf"
 $TrackersFileName = "trackers_best.txt"
-$TrackersDownloadUrl = "https://raw.githubusercontent.com/ngosang/trackerslist/master/$TrackersFileName"
+$TrackersDownloadUrl = "https://raw.githubusercontent.com/paka666/rules/main/trackers/trackers-back.txt"
 $TempTrackersFilePath = Join-Path -Path $env:TEMP -ChildPath $TrackersFileName
 
 try {

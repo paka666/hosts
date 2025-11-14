@@ -50,4 +50,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Update trackers daily"
-          file_pattern: "trackers/*.txt"
+          file_pattern: "trackers/*.txt trackers/*.bak"
