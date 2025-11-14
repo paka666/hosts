@@ -13,9 +13,42 @@ import requests
 # 步骤1: 定义url源和本地源
 # 在此处添加您需要抓取的URL源列表
 URL_SOURCES = [
-    # "https://example.com/trackerlist1.txt",
-    # "https://example.com/trackerlist2.txt",
-    # "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt"
+    "http://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
+    "https://cf.trackerslist.com/all.txt",
+    "https://cf.trackerslist.com/best.txt",
+    "https://cf.trackerslist.com/http.txt",
+    "https://cf.trackerslist.com/nohttp.txt",
+    "https://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
+    "https://newtrackon.com/api/10",
+    "https://newtrackon.com/api/all",
+    "https://newtrackon.com/api/http",
+    "https://newtrackon.com/api/live",
+    "https://newtrackon.com/api/stable",
+    "https://newtrackon.com/api/udp",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_http.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_https.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_ip.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_udp.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all_ws.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_bad.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_best.txt",
+    "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_best_ip.txt",
+    "https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/all.txt",
+    "https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/best.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_http.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_https.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_i2p.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ip.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_udp.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all_ws.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt",
+    "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best_ip.txt",
+    "https://torrends.to/torrent-tracker-list/?download=latest",
+    "https://trackerslist.com/all.txt",
+    "https://trackerslist.com/best.txt",
+    "https://trackerslist.com/http.txt"
 ]
 
 # 本地文件的路径
