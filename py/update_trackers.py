@@ -1,19 +1,31 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Robust tracker normalizer (A-F requirements implemented).
-Writes trackers/trackers-back.txt and keeps recent 3 backups.
-"""
-from urllib.parse import urlparse, urlunparse, ParseResult
+import requests
+from urllib.parse import urlparse
 import re
+from ipaddress import IPv6Address, AddressValueError
 import os
 import time
 import glob
 import shutil
-import requests
 
-# --- CONFIG ---
-# If you want remote fetching, add/remove sources in URLS and enable network fetch in fetch_sources()
+# Constants
+LOCAL_FILE = "trackers/trackers-back.txt"
+BACKUP_KEEP = 3  # Keep recent 3 backups
+TIMEOUT = 10  # Request timeout in seconds
+DEFAULT_PORTS = {
+    "http": 80,
+    "https": 443,
+    "ws": 80,
+    "wss": 443,
+    "udp": None  # No default for UDP, but can add if needed
+}
+PROTOS = ["http", "https", "udp", "ws", "wss"]
+PROTO_RE = re.compile(r'(?:' + "|".join(PROTOS) + r')://', re.IGNORECASE)
+SUFFIX_ACCEPT = re.compile(
+    r"(\.i2p(:\d+)?/a|/announce(\.php)?(\?(passkey|authkey)=[^?&]+(&[^?&]+)*)?|/announce(\.php)?/[^/]+)$",
+    re.IGNORECASE
+)
+
+# URLs list
 URLS = [
     "http://github.itzmx.com/1265578519/OpenTracker/master/tracker.txt",
     "https://cf.trackerslist.com/all.txt",
@@ -53,332 +65,278 @@ URLS = [
     "https://trackerslist.com/http.txt"
 ]
 
-LOCAL_FILE = "trackers/trackers-back.txt"
-OUT_DIR = os.path.dirname(LOCAL_FILE) or "trackers"
-KEEP_BACKUPS = 3
-
-PROTOS = ("http", "https", "udp", "ws", "wss")
-PROTO_RE = re.compile(r'(?:' + "|".join(PROTOS) + r')://', re.IGNORECASE)
-# Recognize protocol occurrences to split glued URLs
-PROTOCOL_OCCURRENCE_RE = re.compile(r'(https?|udp|wss?|ws)://', re.IGNORECASE)
-
-# Suffix acceptance: if matches, do NOT append /announce
-SUFFIX_ACCEPT = re.compile(
-    r'(/announce(\.php)?($|[/?])|'                 # /announce or /announce.php or /announce/...
-    r'/announce\?(?:.*\b(passkey|authkey)=.+)|'    # /announce?passkey=... or /announce?authkey=...
-    r'/announce/[^/]+$|'                           # /announce/<id>
-    r'\.i2p(:\d+)?/a$|/a$)',                       # .i2p/a or :port/a or /a
-    re.IGNORECASE
-)
-
-# Default ports to remove precisely
-DEFAULT_PORTS = {'http': 80, 'https': 443, 'ws': 80, 'wss': 443}
-
-# SIMPLE utils
-
-def read_local(path):
-    if not os.path.exists(path):
-        return ""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-def fetch_sources():
-    """
-    Return combined text from sources.
-    By default we include local file (works offline/CI). If you want remote fetch,
-    uncomment the requests loop below.
-    """
-    parts = []
-    # Optional: fetch remote lists (uncomment if environment has network)
-    for url in URLS:
+def fetch_all_sources(urls):
+    contents = []
+    for url in urls:
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(url, timeout=TIMEOUT)
             r.raise_for_status()
-            parts.append(r.text)
-        except Exception:
-            # fail silently for remote sources; local file still used
-            continue
-    # local
-    parts.append(read_local(LOCAL_FILE))
-    return "\n".join(parts)
+            contents.append(r.text)
+        except Exception as e:
+            print(f"Failed to fetch {url}: {e}")
+    # Read local file if exists
+    if os.path.exists(LOCAL_FILE):
+        try:
+            with open(LOCAL_FILE, "r", encoding="utf-8") as f:
+                contents.append(f.read())
+        except Exception as e:
+            print(f"Failed to read {LOCAL_FILE}: {e}")
+    return "\n".join(contents)
 
-# Cleaning and splitting tokens
-
-def remove_comments_and_split(text):
-    """
-    Remove inline comments (# ; !) and split lines by comma/semicolon/whitespace.
-    Return list of tokens.
-    """
+def tokenize_lines(text):
+    lines = text.splitlines()
     tokens = []
-    for raw in text.splitlines():
-        line = re.split(r'[#!;]', raw, 1)[0].strip()
+    for line in lines:
+        # Remove comments
+        line = re.split(r"[#!;]", line)[0].strip()
         if not line:
             continue
-        # normalize full-width punctuation often found in mixed lists
-        line = line.replace("，", ",").replace("；", ";")
-        parts = [p.strip() for p in re.split(r'[,;\s]+', line) if p.strip()]
+        # Split by delimiters and strip
+        parts = [p.strip() for p in re.split(r"[ ,;]", line) if p.strip()]
         tokens.extend(parts)
     return tokens
 
-def normalize_proto_slashes(s: str) -> str:
-    # fix accidental single-slash forms: http:/host -> http://host, etc.
-    s = re.sub(r'(?i)\bhttp:/([^/])', r'http://\1', s)
-    s = re.sub(r'(?i)\bhttps:/([^/])', r'https://\1', s)
-    s = re.sub(r'(?i)\budp:/([^/])', r'udp://\1', s)
-    s = re.sub(r'(?i)\bws:/([^/])', r'ws://\1', s)
-    s = re.sub(r'(?i)\bwss:/([^/])', r'wss://\1', s)
+def normalize_proto_slashes(s):
+    # Fix http:/ to http://, etc.
+    for proto in PROTOS:
+        s = re.sub(rf'^{proto}:/(?!/)', f'{proto}://', s, flags=re.IGNORECASE)
+        s = re.sub(rf'^{proto}://+', f'{proto}://', s, flags=re.IGNORECASE)
+    # Fix //announce to /announce
+    s = re.sub(r'//announce', '/announce', s)
+    # Fix /announce+108, /announce+, /announce"
+    s = re.sub(r'/announce(\+\d*|\"|\+)?$', '/announce', s)
     return s
 
-def split_concatenated(token: str):
+def split_concatenated(s):
     """
-    Handle two classes:
-      - leading chained protocols: udp://http://wss://host/... => produce one tracker per protocol with same suffix
-      - glued-internal URLs: ...announcehttp://other... => split by protocol occurrences
-    Return list of candidate URL strings (trimmed).
+    Carefully split concatenated trackers without breaking valid ones.
+    Handles leading protocols and full matches.
     """
-    s = token.strip()
-    if not s:
-        return []
+    s = s.strip()
     s = normalize_proto_slashes(s)
 
-    # find full proto://... fragments
-    fulls = re.findall(r'(?:' + "|".join(PROTOS) + r')://[^\s,;"]+', s, flags=re.IGNORECASE)
+    # Find all full proto://non-separator+ matches
+    full_matches = PROTO_RE.finditer(s)
+    full_spans = []
+    for m in full_matches:
+        start = m.start()
+        # Greedily match until next separator or end
+        mm = re.match(r'(?:' + "|".join(PROTOS) + r')://[^\s,;"]+', s[start:], flags=re.IGNORECASE)
+        if mm:
+            full_spans.append((start, start + mm.end(), mm.group(0)))
+
     results = []
-    if fulls:
-        results.extend(fulls)
+    if not full_spans:
+        return [s] if PROTO_RE.search(s) else []  # Only keep if has protocol
 
-    # detect leading chained protocols (e.g., udp://http://wss://suffix)
-    m = re.match(r'^((?:https?|udp|ws|wss)://?)+(.+)$', token, re.IGNORECASE)
-    if m:
-        protos_part = m.group(1)
-        suffix = m.group(2)
-        seq = re.findall(r'(https?|udp|ws|wss)', protos_part, re.IGNORECASE)
-        seen = set()
-        for p in seq:
-            pl = p.lower()
-            if pl not in seen:
-                seen.add(pl)
-                # ensure suffix not prefixed with an extra proto
-                suffix2 = re.sub(r'^(?:' + "|".join(PROTOS) + r')://', '', suffix, flags=re.IGNORECASE)
-                results.append(f'{pl}://{suffix2}')
+    # Extract full-match substrings
+    for (_, _, substr) in full_spans:
+        results.append(substr)
 
-    # if nothing found, keep original
-    if not results:
-        return [s]
-    # dedupe keeping order
+    # Handle leading protocol-only prefixes
+    first_full_start = full_spans[0][0]
+    prefix = s[:first_full_start]
+    prefix_protos = re.findall(r'(?:' + "|".join(PROTOS) + r')(?=://)', prefix, flags=re.IGNORECASE)
+    if prefix_protos:
+        # Use the last full match's suffix (without protocol)
+        last_full = full_spans[-1][2]
+        suffix_no_proto = re.sub(r'^(?:' + "|".join(PROTOS) + r')://', '', last_full, flags=re.IGNORECASE)
+        for p in prefix_protos:
+            results.append(f"{p.lower()}://{suffix_no_proto}")
+
+    # Deduplicate while preserving order
     seen = set()
-    out = []
+    ordered = []
     for r in results:
-        r2 = r.strip()
-        if r2 and r2 not in seen:
-            seen.add(r2)
-            out.append(r2)
-    return out
-
-# URL reconstruction helpers
-
-def host_is_valid(host: str) -> bool:
-    """Accepts IPv4, IPv6, localhost, or any host containing a dot (covers tracker.i2p, .local, etc.)."""
-    if not host:
-        return False
-    if host.lower() == "localhost":
-        return True
-    h = host
-    if h.startswith("[") and h.endswith("]"):
-        h = h[1:-1]
-    # IPv4 quick check
-    try:
-        parts = h.split(".")
-        if len(parts) == 4 and all(0 <= int(p) < 256 for p in parts):
-            return True
-    except Exception:
-        pass
-    # IPv6
-    try:
-        import ipaddress
-        ipaddress.IPv6Address(h)
-        return True
-    except Exception:
-        pass
-    # dotted domain
-    if "." in h:
-        return True
-    return False
+        if r not in seen:
+            seen.add(r)
+            ordered.append(r)
+    return ordered
 
 def build_url_from_parsed(parsed):
-    """
-    Rebuild URL preserving:
-     - IPv6 with brackets in output
-     - username:password@
-     - port if present
-     - path, query, fragment
-    """
     scheme = parsed.scheme.lower()
     host = parsed.hostname
-    if not host:
+    if host is None:
         return None
     port = parsed.port
-    user = parsed.username
-    pwd = parsed.password
-    # bracket IPv6 for display
+    username = parsed.username
+    password = parsed.password
+    # Check if IPv6
+    is_ipv6 = False
     try:
-        from ipaddress import IPv6Address
         IPv6Address(host)
-        host_part = f'[{host}]'
-    except Exception:
-        host_part = host
-    auth = ""
-    if user:
-        auth = user
-        if pwd:
-            auth += f":{pwd}"
-        auth += "@"
-    netloc = auth + host_part
+        is_ipv6 = True
+    except AddressValueError:
+        pass
+
+    host_part = f"[{host}]" if is_ipv6 else host
+
+    # Add auth if present
+    auth_part = ""
+    if username:
+        auth_part = username
+        if password:
+            auth_part += f":{password}"
+        auth_part += "@"
+
+    netloc = f"{auth_part}{host_part}"
     if port:
         netloc += f":{port}"
+
     path = parsed.path or ""
     params = f";{parsed.params}" if parsed.params else ""
     query = f"?{parsed.query}" if parsed.query else ""
     frag = f"#{parsed.fragment}" if parsed.fragment else ""
+
     return f"{scheme}://{netloc}{path}{params}{query}{frag}"
 
-def remove_default_port(parsed):
-    """Return a ParseResult-like object with default port removed for http/ws and https/wss."""
-    scheme = parsed.scheme.lower()
-    port = parsed.port
-    if port and scheme in DEFAULT_PORTS and DEFAULT_PORTS[scheme] == port:
-        # rebuild netloc without port but keep auth and bracketed host if needed
-        host = parsed.hostname
-        user = parsed.username
-        pwd = parsed.password
-        try:
-            from ipaddress import IPv6Address
-            IPv6Address(host)
-            host_part = f'[{host}]'
-        except Exception:
-            host_part = host or ""
-        auth = ""
-        if user:
-            auth = user
-            if pwd:
-                auth += f":{pwd}"
-            auth += "@"
-        new_netloc = auth + host_part
-        return parsed._replace(netloc=new_netloc)
-    return parsed
+def is_valid_host(host):
+    if not host:
+        return False
+    if host.lower() == "localhost":
+        return True
+    # Strip brackets for check
+    h = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        IPv6Address(h)
+        return True
+    except AddressValueError:
+        pass
+    try:
+        IPv4Address(h)
+        return True
+    except AddressValueError:
+        pass
+    # For domains, require at least one dot (TLD check)
+    if "." in h:
+        return True
+    return False
 
-def must_append_announce(url_str):
-    """Return URL string, appending /announce if suffix not acceptable."""
+def append_announce_if_needed(url_str):
     parsed = urlparse(url_str)
-    path = parsed.path or ""
-    q = parsed.query or ""
-    combined = path + ("?" + q if q else "")
+    combined = parsed.path
+    if parsed.query:
+        combined += "?" + parsed.query
     if SUFFIX_ACCEPT.search(combined):
         return url_str
-    # append /announce carefully
-    if path.endswith("/"):
-        new_path = path + "announce"
-    elif path == "":
+    new_path = parsed.path
+    if not new_path or new_path == "/":
         new_path = "/announce"
+    elif not new_path.endswith("/"):
+        new_path += "/announce"
     else:
-        new_path = path + "/announce"
-    p2 = parsed._replace(path=new_path)
-    out = build_url_from_parsed(remove_default_port(p2))
-    return out or url_str + ("/announce" if not url_str.endswith("/") else "announce")
+        new_path += "announce"
+    return build_url_from_parsed(parsed._replace(path=new_path))
 
-# Main pipeline
+def remove_default_port(parsed):
+    scheme = parsed.scheme.lower()
+    port = parsed.port
+    if port and scheme in DEFAULT_PORTS and port == DEFAULT_PORTS[scheme]:
+        netloc = parsed.hostname
+        if parsed.username:
+            auth = parsed.username
+            if parsed.password:
+                auth += f":{parsed.password}"
+            netloc = f"{auth}@{netloc}"
+        # Preserve IPv6 brackets
+        if ":" in netloc and not netloc.startswith("["):
+            netloc = f"[{netloc}]"
+        return parsed._replace(netloc=netloc)
+    return parsed
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
-    text = fetch_sources()
-    tokens = remove_comments_and_split(text)
+    print("Fetching sources...")
+    combined = fetch_all_sources(URLS)
+    print("Tokenizing...")
+    tokens = tokenize_lines(combined)
+    print(f"Initial tokens: {len(tokens)}")
 
-    # Step A: expand concatenated tokens
+    # Expand concatenated
     expanded = []
     for t in tokens:
-        # skip pure suffix tokens
-        if t in ("/announce", "/announce.php", "/announce/"):
-            continue
         parts = split_concatenated(t)
-        for p in parts:
-            if p and p.strip():
-                expanded.append(p.strip())
+        expanded.extend([p.strip(' \'"') for p in parts if p.strip(' \'"') and PROTO_RE.search(p)])
+    print(f"After split: {len(expanded)}")
 
-    # normalize protocol stray slashes
-    expanded = [normalize_proto_slashes(x) for x in expanded]
-
-    # extract all full proto://... fragments in expanded tokens
-    candidates = []
-    for t in expanded:
-        # skip trivial garbage
-        if not PROTO_RE.search(t):
-            continue
-        found = re.findall(r'(?:' + "|".join(PROTOS) + r')://[^\s,;"]+', t, flags=re.IGNORECASE)
-        if found:
-            candidates.extend(found)
-        else:
-            candidates.append(t)
-
-    # Validate, normalize and rebuild
+    # Normalize and validate
     normalized = []
-    for c in candidates:
-        # strip quotes and trailing punctuation
-        c = c.strip(" '\"")
-        parsed = urlparse(c)
-        if not parsed.scheme or not parsed.netloc:
+    for t in expanded:
+        try:
+            parsed = urlparse(t)
+            if not parsed.scheme or not parsed.netloc:
+                continue
+            scheme = parsed.scheme.lower()
+            if scheme not in PROTOS:
+                continue
+            host = parsed.hostname
+            port = parsed.port
+            # Fix concatenated port if no port
+            if port is None:
+                match = re.match(r"^(.+?)(\d+)$", parsed.netloc)
+                if match:
+                    base = match.group(1)
+                    port_str = match.group(2)
+                    if 1 <= int(port_str) <= 65535 and is_valid_host(base):
+                        new_netloc = f"{base}:{port_str}"
+                        parsed = parsed._replace(netloc=new_netloc)
+                        host = urlparse(f"{scheme}://{new_netloc}").hostname
+            # Remove brackets if not IPv6
+            if host and host.startswith("[") and host.endswith("]"):
+                inside = host[1:-1]
+                try:
+                    IPv6Address(inside)
+                except AddressValueError:
+                    # Not IPv6, remove brackets
+                    new_netloc = inside
+                    if parsed.port:
+                        new_netloc += f":{parsed.port}"
+                    if parsed.username:
+                        auth = parsed.username + (f":{parsed.password}" if parsed.password else "")
+                        new_netloc = f"{auth}@{new_netloc}"
+                    parsed = parsed._replace(netloc=new_netloc)
+                    host = parsed.hostname
+            if not is_valid_host(host):
+                continue
+            # Remove default port
+            parsed = remove_default_port(parsed)
+            url_out = build_url_from_parsed(parsed)
+            if not url_out:
+                continue
+            # Append /announce if needed
+            url_out = append_announce_if_needed(url_out)
+            normalized.append(url_out)
+        except Exception as e:
+            print(f"Error processing {t}: {e}")
             continue
-        scheme = parsed.scheme.lower()
-        if scheme not in PROTOS:
-            continue
-        # hostname (urlparse gives hostname without brackets)
-        host = parsed.hostname
-        if not host:
-            # salvage netloc (remove userinfo)
-            nl = parsed.netloc
-            if "@" in nl:
-                nl = nl.split("@", 1)[1]
-            # remove trailing :port if single colon
-            if ":" in nl and nl.count(":") == 1:
-                host = nl.split(":", 1)[0]
-            else:
-                host = nl
-        if not host_is_valid(host):
-            continue
-        # remove default ports if present
-        parsed2 = remove_default_port(parsed)
-        # rebuild preserving IPv6 brackets
-        out = build_url_from_parsed(parsed2)
-        if not out:
-            continue
-        # fix doubled // in path
-        out = re.sub(r'//+', '/', out.replace(':/', '::TEMP::')).replace('::TEMP::', ':/')
-        # append announce if needed
-        out = must_append_announce(out)
-        # final sanitize: remove any stray quotes
-        normalized.append(out.strip(" '\""))
 
-    # dedupe and sort
-    unique = sorted(dict.fromkeys(normalized))
+    # Deduplicate and sort
+    unique = sorted(set(normalized))
+    print(f"Final unique trackers: {len(unique)}")
 
-    # Backup existing local file
+    # Backup and save
+    os.makedirs(os.path.dirname(LOCAL_FILE), exist_ok=True)
     if os.path.exists(LOCAL_FILE):
         ts = time.strftime("%Y%m%d_%H%M%S")
-        bak = os.path.join(OUT_DIR, f"{ts}-trackers-back.txt")
+        bak = os.path.join(os.path.dirname(LOCAL_FILE), f"{ts}-trackers-back.txt")
         shutil.copy(LOCAL_FILE, bak)
-    # write
+        print(f"Backup created: {bak}")
+
     with open(LOCAL_FILE, "w", encoding="utf-8") as f:
         for u in unique:
             f.write(u + "\n")
 
-    # cleanup old backups
-    backups = sorted(glob.glob(os.path.join(OUT_DIR, "*-trackers-back.txt")), key=os.path.getmtime, reverse=True)
-    for old in backups[KEEP_BACKUPS:]:
+    # Clean old backups
+    backups = glob.glob(os.path.join(os.path.dirname(LOCAL_FILE), "*-trackers-back.txt"))
+    backups.sort(key=os.path.getmtime, reverse=True)
+    for old in backups[BACKUP_KEEP:]:
         try:
             os.remove(old)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Failed to remove old backup {old}: {e}")
 
-    print(f"Processing complete. Updated {LOCAL_FILE} with {len(unique)} trackers.")
+    print(f"Updated {LOCAL_FILE} with {len(unique)} trackers.")
 
 if __name__ == "__main__":
+    # Add a short delay for "thinking time" (simulates processing pause, optional for GitHub actions)
+    time.sleep(2)
     main()
