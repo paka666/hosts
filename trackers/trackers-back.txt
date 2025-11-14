@@ -1,2 +1,1 @@
-http://tracker1.itzmx.com:8080/announce
-http://www.peckservers.com:9000/announce
+wss://tracker.openwebtorrent.com/announce
