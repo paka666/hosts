@@ -112,8 +112,8 @@ for i in range(len(cleaned)):
 
 # --- 3. 步骤 A (扩展) ---
 
-# A (新): 处理 udp://http://wss://... 这种粘连协议头
 print("Processing Step A (concatenated protocols)...")
+# A (新): 处理 udp://http://wss://... 这种粘连协议头
 new_cleaned = []
 for t in cleaned:
     # 匹配一个或多个协议头
@@ -158,7 +158,7 @@ for t in cleaned:
             break
 cleaned = [t for t in new_cleaned if t] # 去除拆分产生的空行
 
-# --- 4. 步骤 C (部分) 和 新的主机验证 ---
+# --- 4. 步骤 C (部分) 和 修复后的主机验证 ---
 
 print("Processing Step C (endings) and D (host/port fix)...")
 
@@ -182,15 +182,27 @@ def is_valid_host(host):
         return True
     except AddressValueError:
         pass
+    
+    # 
+    # *** BUG 修复 ***
+    # 检查IPv6时, 必须先移除方括号, 
+    # 因为 `hostname` 属性会是 "[::1]"
+    #
+    if host.startswith("[") and host.endswith("]"):
+        host_unbracketed = host[1:-1]
+    else:
+        host_unbracketed = host
+
     try:
-        IPv6Address(host)
+        IPv6Address(host_unbracketed)
         return True
     except AddressValueError:
         pass
     
     # 检查TLD-less名称 (如 'ipv4announce')
     # 我们假设任何带点的(.)主机都是有效的 (如 'tracker.com', 'tracker.local', 'tracker.i2p')
-    if "." in host:
+    # 注意: 这里使用 host_unbracketed 来正确处理 [domain.com] 的情况
+    if "." in host_unbracketed:
         return True
     
     # No dot, not an IP, not localhost. Filter it.
@@ -206,19 +218,19 @@ for t in cleaned:
         if not parsed.scheme or not parsed.netloc:
             continue
 
-        host = parsed.hostname
+        host = parsed.hostname # e.g., "tracker.com", "1.2.3.4", "[::1]", "[domain.com]"
         port = parsed.port
 
         # C: 修复 [domain] 或 [domain:port]
-        # urlparse("wss://[tracker.com]:8080/a") -> hostname='[tracker.com]', port=8080
         if host and host.startswith("[") and host.endswith("]"):
-            inside_host = host[1:-1] # e.g., "2001:db8::1" or "tracker.com"
+            inside_host = host[1:-1] # e.g., "::1" or "domain.com"
             try:
                 IPv6Address(inside_host)
-                # 是合法的IPv6, 保留方括号, host/port正确, 无需操作
+                # 是合法的IPv6, 'host' 变量 ("[::1]") 保持不变,
+                # is_valid_host() 会处理它
             except AddressValueError:
                 # 不是IPv6, 认为是 [domain], 移除 []
-                host = inside_host # host 'tracker.com'
+                host = inside_host # 'host' 变为 "domain.com"
                 # 重建 netloc
                 new_netloc = host
                 if port:
@@ -233,6 +245,7 @@ for t in cleaned:
                 # 重新解析
                 host = parsed.hostname
                 port = parsed.port
+
 
         # D: 修复粘连的端口 (如 .net80, .i2p6969)
         if port is None:
@@ -276,7 +289,7 @@ for i in range(len(cleaned)):
 print("Processing Step E (default ports)...")
 default_ports = {
     "http": 80,
-    "https": 443,
+    "https://": 443,
     "ws": 80,
     "wss": 443,
 }
@@ -284,6 +297,7 @@ new_cleaned = []
 for t in cleaned:
     try:
         parsed = urlparse(t)
+        # 修复: default_ports 的 key 应为 scheme
         if parsed.scheme in default_ports and parsed.port == default_ports[parsed.scheme]:
             # 重建 netloc, 去掉端口
             new_netloc = parsed.hostname
