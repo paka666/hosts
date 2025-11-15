@@ -7,12 +7,11 @@ on:
     - cron: "0 20 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   normalize:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
