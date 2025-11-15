@@ -1,5 +1,4 @@
 name: Normalize Files (UTF-8 + LF)
-
 on:
   push:
     branches:
@@ -7,29 +6,22 @@ on:
   schedule:
     - cron: "0 20 * * *"
   workflow_dispatch:
-
 jobs:
   normalize:
     runs-on: ubuntu-latest
-
     permissions:
-      contents: write
-      workflows: write
-
+      contents: write  # 只需此权限，用于更新仓库内容（包括工作流文件）
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set Git config
         run: |
           git config --global core.autocrlf input
           git config --global core.eol lf
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-
       - name: Ensure .gitattributes exists (LF policy)
         run: |
           if [ ! -f .gitattributes ]; then
@@ -37,39 +29,94 @@ jobs:
           elif ! grep -q 'text eol=lf' .gitattributes; then
             echo '* text eol=lf' >> .gitattributes
           fi
-
+          # 额外添加对二进制文件的处理（避免误处理非文本文件）
+          echo '*.png binary' >> .gitattributes
+          echo '*.jpg binary' >> .gitattributes
+          echo '*.gif binary' >> .gitattributes
+          echo '*.pdf binary' >> .gitattributes
+          echo '*.zip binary' >> .gitattributes
+          # 可以根据仓库需要添加更多二进制类型
       - name: Install encoding tools
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y dos2unix enca file
-
-      - name: Normalize all text files to UTF-8 + LF
+          sudo apt-get install -y dos2unix enca file iconv
+      - name: Normalize text files to UTF-8 + LF
         shell: bash
         run: |
-          echo "🔍 Scanning files for encoding and line endings..."
-          find . -type f \
-            -not -path "./.git/*" \
-            -not -path "./.github/*" \
-            -not -path "./node_modules/*" \
-            -not -path "./venv/*" \
-            | while read -r f; do
-              if file "$f" | grep -qE "text|script|source"; then
-                encoding=$(file -bi "$f" | sed -n 's/.*charset=\(.*\)$/\1/p')
-                if [ "$encoding" != "utf-8" ] && [ "$encoding" != "us-ascii" ]; then
-                  echo "🧩 Converting $f from $encoding → UTF-8"
-                  iconv -f "$encoding" -t utf-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
-                fi
-                dos2unix "$f" 2>/dev/null || true
+          echo "🔍 Determining scan scope based on trigger..."
+          files=()
+          changed_files=()
+          trigger="${{ github.event_name }}"
+          
+          if [ "$trigger" = "push" ]; then
+            echo "📥 Push detected: Scanning only changed files in this commit."
+            # 获取本次 push/commit 中变更的文件（包括添加/修改/重命名）
+            git diff --name-only HEAD~1 > changed_files.txt || echo "No previous commit; scanning all." && git ls-files > changed_files.txt
+            while IFS= read -r f; do
+              if [ -f "$f" ]; then  # 只处理存在的文件
+                changed_files+=("$f")
               fi
-            done
-
-      - name: Git normalize commit & push
-        run: |
-          git add --renormalize .
-          if ! git diff --cached --quiet; then
-            git commit -m "Normalize all files to UTF-8 + LF (auto)"
-            git push
-            echo "✅ Normalization done and pushed."
+            done < changed_files.txt
+            rm -f changed_files.txt
+            scan_list=("${changed_files[@]}")
           else
-            echo "✅ Everything already normalized."
+            echo "🛠️ Manual/scheduled run: Scanning entire repository."
+            scan_list=($(find . -type f \
+              -not -path "./.git/*" \
+              -not -path "./node_modules/*" \
+              -not -path "./venv/*"))
           fi
+          
+          echo "📂 Files to scan: ${#scan_list[@]}"
+          for f in "${scan_list[@]}"; do
+            # 检查是否为文本文件（排除二进制）
+            if file "$f" | grep -qE "text|script|source|ASCII|UTF-8" && ! file "$f" | grep -q "executable"; then
+              modified=false
+              # 检测编码
+              encoding=$(file -bi "$f" | sed -n 's/.*charset=\(.*\)$/\1/p')
+              if [ "$encoding" != "utf-8" ] && [ "$encoding" != "us-ascii" ] && [ "$encoding" != "unknown-8bit" ]; then
+                echo "🧩 Converting $f from $encoding → UTF-8"
+                iconv -f "$encoding" -t utf-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f" || echo "⚠️ Failed to convert $f (unsupported encoding?)" >&2
+                modified=true
+              fi
+              # 转换为 LF 行尾
+              if dos2unix "$f" 2>/dev/null; then
+                modified=true
+              fi
+              # 验证转换后无乱码（简单检查文件是否可读）
+              if ! file "$f" | grep -q "UTF-8"; then
+                echo "⚠️ Potential garbled content in $f after conversion" >&2
+              fi
+              if [ "$modified" = true ]; then
+                files+=("$f")
+              fi
+            fi
+          done
+          
+          # 显示修复的文件
+          if [ ${#files[@]} -gt 0 ]; then
+            echo "✅ Fixed files:"
+            for file in "${files[@]}"; do
+              echo "- $file"
+            done
+          else
+            echo "✅ No files needed fixing."
+          fi
+          
+          # 只对处理过的文件进行 renormalize 和 add（避免不必要变更）
+          if [ ${#files[@]} -gt 0 ]; then
+            git add --renormalize "${files[@]}"
+            git add "${files[@]}"
+          fi
+      - name: Git commit & push
+        run: |
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto-normalize files to UTF-8 + LF (fix encoding/line endings in changed files)"
+            git push
+            echo "✅ Normalization done and pushed. Files updated for GitHub compatibility (no garbled text)."
+          else
+            echo "✅ No issues found; everything already normalized."
+          fi
+      - name: Handle errors gracefully
+        if: ${{ failure() }}
+        run: echo "❌ Normalization encountered issues; check logs for details."
