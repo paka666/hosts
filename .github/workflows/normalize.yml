@@ -6,12 +6,14 @@ on:
   schedule:
     - cron: "0 20 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   normalize:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      workflows: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -74,7 +76,6 @@ jobs:
           fi
           echo "📂 Files to scan: ${#scan_list[@]}"
           for f in "${scan_list[@]}"; do
-            # 检查是否为文本文件（排除二进制和可执行文件）
             mime=$(file -bi "$f" 2>/dev/null || true)
             if [ -z "$mime" ] || ! echo "$mime" | grep -q "text/" || file "$f" | grep -q "executable"; then
               continue
