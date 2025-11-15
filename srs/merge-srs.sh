@@ -542,11 +542,11 @@ preprocess_configs=(
   "!cn"
 # ai
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-category-ai-cn.json"
-  "https://raw.githubusercontent.com/paka666/srs/json/subset/tmp/geosite-category-ai-cn@!cn.json"
+  "https://raw.githubusercontent.com/paka666/rules/main/srs/json/subset/tmp/geosite-category-ai-cn@!cn.json"
   "srs/json/subset/geosite-category-ai-cn@cn.json"
   "cn"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-doubao.json"
-  "https://raw.githubusercontent.com/paka666/srs/json/subset/tmp/geosite-doubao@!cn.json"
+  "https://raw.githubusercontent.com/paka666/rules/main/srs/json/subset/tmp/geosite-doubao@!cn.json"
   "srs/json/subset/doubao@cn.json"
   "cn"
   "https://raw.githubusercontent.com/lyc8503/sing-box-rules/rule-set-geosite/geosite-jetbrains.json"
