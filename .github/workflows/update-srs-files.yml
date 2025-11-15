@@ -55,4 +55,3 @@ jobs:
         with:
           commit_message: "chore: update srs daily"
           file_pattern: "srs/*/*.json srs/*.srs"
-
