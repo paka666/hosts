@@ -1,0 +1,16 @@
+{
+    "rules": [
+        {
+            "domain": [
+                "coze.com",
+                "marscode.com",
+                "trae.ai"
+            ],
+            "domain_suffix": [
+                ".coze.com",
+                ".marscode.com",
+                ".trae.ai"
+            ]
+        }
+    ]
+}
