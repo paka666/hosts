@@ -1,4 +1,4 @@
-name: Normalize Files (UTF-8 + LF)
+name: Normalize files (utf-8 + lf)
 on:
   push:
     branches:
@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set Git config
         run: |
           git config --global core.autocrlf input
@@ -29,13 +30,13 @@ jobs:
           elif ! grep -q 'text eol=lf' .gitattributes; then
             echo '* text eol=lf' >> .gitattributes
           fi
-          # 额外添加对二进制文件的处理（避免误处理非文本文件）
+          # 额外添加对二进制文件的处理（避免误处理非文本文件） - 修正语法为 "*.ext binary"
+          # 可以根据仓库需要添加更多二进制类型
           echo '*.png binary' >> .gitattributes
           echo '*.jpg binary' >> .gitattributes
           echo '*.gif binary' >> .gitattributes
           echo '*.pdf binary' >> .gitattributes
           echo '*.zip binary' >> .gitattributes
-          # 可以根据仓库需要添加更多二进制类型
       - name: Install encoding tools
         run: |
           sudo apt-get update -y
@@ -47,7 +48,7 @@ jobs:
           files=()
           changed_files=()
           trigger="${{ github.event_name }}"
-          
+
           if [ "$trigger" = "push" ]; then
             echo "📥 Push detected: Scanning only changed files in this commit."
             # 获取本次 push/commit 中变更的文件（包括添加/修改/重命名）
@@ -66,33 +67,39 @@ jobs:
               -not -path "./node_modules/*" \
               -not -path "./venv/*"))
           fi
-          
+
           echo "📂 Files to scan: ${#scan_list[@]}"
           for f in "${scan_list[@]}"; do
-            # 检查是否为文本文件（排除二进制）
-            if file "$f" | grep -qE "text|script|source|ASCII|UTF-8" && ! file "$f" | grep -q "executable"; then
+            # 检查是否为文本文件（排除二进制和可执行文件）
+            mime=$(file -bi "$f")
+            if echo "$mime" | grep -q "text/" && ! file "$f" | grep -q "executable"; then
               modified=false
               # 检测编码
-              encoding=$(file -bi "$f" | sed -n 's/.*charset=\(.*\)$/\1/p')
+              encoding=$(echo "$mime" | sed -n 's/.*charset=\(.*\)$/\1/p')
               if [ "$encoding" != "utf-8" ] && [ "$encoding" != "us-ascii" ] && [ "$encoding" != "unknown-8bit" ]; then
-                echo "🧩 Converting $f from $encoding → UTF-8"
-                iconv -f "$encoding" -t utf-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f" || echo "⚠️ Failed to convert $f (unsupported encoding?)" >&2
+                echo "🧩 Converting $f from $encoding → UTF-8 (with ignore invalid chars)"
+                iconv -f "$encoding" -t utf-8//IGNORE "$f" -o "$f.tmp" && mv "$f.tmp" "$f" || echo "⚠️ Failed to convert $f (unsupported encoding?)" >&2
                 modified=true
               fi
-              # 转换为 LF 行尾
-              if dos2unix "$f" 2>/dev/null; then
+              # 转换为 LF 行尾（安静模式，只如果实际修改）
+              dos2unix -q "$f" 2>/dev/null
+              if [ $? -eq 1 ]; then
                 modified=true
               fi
-              # 验证转换后无乱码（简单检查文件是否可读）
-              if ! file "$f" | grep -q "UTF-8"; then
-                echo "⚠️ Potential garbled content in $f after conversion" >&2
+              # 验证转换后无乱码（检查是否为 UTF-8 或 ASCII兼容）
+              post_mime=$(file -bi "$f")
+              if ! echo "$post_mime" | grep -qE "utf-8|us-ascii"; then
+                echo "⚠️ Potential garbled content in $f after conversion (reverting changes)" >&2
+                # 如果检测到潜在乱码，回滚文件（假设 git 有原版）
+                git checkout -- "$f" || true
+                modified=false
               fi
               if [ "$modified" = true ]; then
                 files+=("$f")
               fi
             fi
           done
-          
+
           # 显示修复的文件
           if [ ${#files[@]} -gt 0 ]; then
             echo "✅ Fixed files:"
@@ -102,7 +109,7 @@ jobs:
           else
             echo "✅ No files needed fixing."
           fi
-          
+
           # 只对处理过的文件进行 renormalize 和 add（避免不必要变更）
           if [ ${#files[@]} -gt 0 ]; then
             git add --renormalize "${files[@]}"
