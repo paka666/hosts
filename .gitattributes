@@ -6,14 +6,14 @@
 *.yaml text eol=lf
 *.json text eol=lf
 *.txt text eol=lf
-*.md  text eol=lf
-*.py  text eol=lf
-*.js  text eol=lf
-*.ts  text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
 *.html text eol=lf
-*.css  text eol=lf
+*.css text eol=lf
 *.conf text eol=lf
-*.ini  text eol=lf
+*.ini text eol=lf
 
 # --- 二进制文件不改换行 ---
 *.png binary
@@ -22,8 +22,8 @@
 *.gif binary
 *.zip binary
 *.tar binary
-*.gz  binary
-*.7z  binary
+*.gz binary
+*.7z binary
 *.exe binary
-*.so  binary
+*.so binary
 *.dll binary
