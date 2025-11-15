@@ -10,7 +10,7 @@ jobs:
   normalize:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 只需此权限，用于更新仓库内容（包括工作流文件）
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
       - name: Install encoding tools
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y dos2unix enca file iconv
+          sudo apt-get install -y dos2unix enca file
       - name: Normalize text files to UTF-8 + LF
         shell: bash
         run: |
